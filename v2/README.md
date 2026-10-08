@@ -1,0 +1,3 @@
+# MisFinanzas v2 (Fase 1)
+Pasos: 1) crear proyecto en Supabase; 2) correr sql/01_fase1_esquema.sql en el SQL Editor; 3) crear cliente OAuth de Google y activarlo en Authentication > Providers > Google (redirect: https://<proyecto>.supabase.co/auth/v1/callback); 4) Authentication > URL Configuration: Site URL y Redirect URLs = https://lolec7.github.io/misfinanzas/v2/; 5) completar config.js con Project URL y clave anon (NUNCA service_role); 6) subir esta carpeta como v2/ al repo; 7) entrar, crear espacio, Config > Importar desde v1; 8) iPhone: Safari > Compartir > Agregar a inicio.
+sql/02_fase3_cuotas_recurrentes.sql se corre recién en la Fase 3.
