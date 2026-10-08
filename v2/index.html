@@ -193,6 +193,7 @@ textarea{resize:vertical;min-height:54px}
     <div class="logo"><i class="ti ti-settings"></i></div>
     <h1>Falta un paso</h1>
     <p>Abrí el archivo <code>config.js</code> y pegá los datos de tu proyecto de Supabase.</p>
+    <div id="setup-err" class="alert alert-err hidden" role="alert" style="text-align:left;margin:10px 0"></div>
     <ol class="setup-steps">
       <li>En Supabase: <b>Project Settings → API</b></li>
       <li>Copiá <b>Project URL</b> y la clave <b>anon / publishable</b></li>
@@ -211,6 +212,7 @@ textarea{resize:vertical;min-height:54px}
       <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.3 0 20 0 24s.9 7.7 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
       Continuar con Google
     </button>
+    <div id="login-err" class="alert alert-err hidden" role="alert" style="text-align:left;margin-top:12px;word-break:break-word"></div>
     <p class="fineprint">Solo vos ves tus datos. Se guardan cifrados en tu propia base de datos.</p>
   </div>
 </div>
@@ -918,13 +920,36 @@ async function importV1() {
 async function boot() {
   const cfg = window.MF_CONFIG || {};
   if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || /PEGAR_AQUI/.test(cfg.SUPABASE_URL + cfg.SUPABASE_ANON_KEY)) return show('screen-setup');
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(String(cfg.SUPABASE_URL).trim())) {
+    const e = $('#setup-err'); e.textContent = 'SUPABASE_URL no es válida: tiene que tener la forma https://TU-PROYECTO.supabase.co (la copiás de Project Settings → API → Project URL). Ahora dice: ' + String(cfg.SUPABASE_URL).slice(0, 30) + '…';
+    e.classList.remove('hidden'); return show('screen-setup');
+  }
+  if (String(cfg.SUPABASE_ANON_KEY).trim().length < 30 || /service_role|sb_secret_/.test(cfg.SUPABASE_ANON_KEY)) {
+    const e = $('#setup-err'); e.textContent = 'SUPABASE_ANON_KEY parece incompleta o es una clave secreta. Tiene que ser la clave publishable (sb_publishable_…) o la anon public (eyJ…), entera.';
+    e.classList.remove('hidden'); return show('screen-setup');
+  }
+  // Si Google/Supabase devolvió un error en la dirección, mostrarlo (antes se perdía en silencio)
+  try {
+    const qp = new URLSearchParams(location.search.slice(1) + '&' + location.hash.slice(1));
+    const err = qp.get('error_description') || qp.get('error');
+    if (err) {
+      const box = $('#login-err'); box.textContent = 'No se pudo iniciar sesión: ' + err.replace(/\+/g, ' ') + (qp.get('error_code') ? ' (' + qp.get('error_code') + ')' : '');
+      box.classList.remove('hidden'); history.replaceState(null, '', location.pathname);
+    }
+  } catch (e) { /* sin acción */ }
   sb = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   bindEvents();
   sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') { S.booted = false; show('screen-login'); }
     else if (session && !S.booted) { S.booted = true; setTimeout(() => startSession(session), 0); }
   });
+  // initialize() procesa el #access_token de la dirección; si falla (p. ej. clave de Supabase mal pegada) lo mostramos
+  const init = await sb.auth.initialize();
   const { data: { session } } = await sb.auth.getSession();
+  if (!session && init && init.error) {
+    const box = $('#login-err'); box.textContent = 'Google te identificó, pero la app no pudo validar la sesión con Supabase: ' + (init.error.message || init.error) + '. Revisá que SUPABASE_URL y SUPABASE_ANON_KEY de config.js estén completas y sin recortes.';
+    box.classList.remove('hidden');
+  }
   if (!session) show('screen-login');
   else if (!S.booted) { S.booted = true; await startSession(session); }
 }
