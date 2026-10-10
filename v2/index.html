@@ -95,6 +95,18 @@ textarea{resize:vertical;min-height:54px}
 .type-btn.t-gasto{background:var(--red-bg);color:var(--red);border-color:var(--red-bd)}
 .type-btn.t-ingreso{background:var(--green-bg);color:var(--green);border-color:var(--green-bd)}
 
+
+/* ---------- Sincronizar hoja ---------- */
+#sync-overlay{position:fixed;inset:0;background:var(--bg);z-index:60;overflow-y:auto;padding:1rem 1.1rem 6rem}
+#sync-overlay .wrap{max-width:900px;margin:0 auto}
+.sy-row{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);padding:.8rem .9rem;margin-bottom:.6rem}
+.sy-row.off{opacity:.55}
+.sy-row.bad{border-color:var(--red-bd);background:var(--red-bg)}
+.sy-top{display:flex;gap:.6rem;align-items:center;margin-bottom:.55rem}
+.sy-top input[type=checkbox]{width:auto;flex:none}
+.sy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.5rem}
+.sy-bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:0.5px solid var(--border);padding:.7rem 1.1rem;display:flex;gap:.6rem;justify-content:space-between;align-items:center;z-index:61}
+
 /* ---------- Resumen ---------- */
 .pill-bal{display:inline-flex;padding:.3rem .85rem;border-radius:var(--pill);font-size:13px;font-weight:600}
 .pill-bal.pos{background:var(--green-bg);color:var(--green);border:0.5px solid var(--green-bd)}
@@ -318,7 +330,8 @@ textarea{resize:vertical;min-height:54px}
     <!-- MOVIMIENTOS -->
     <section id="tab-movs" class="tab">
       <div class="page-head"><span class="page-title">Movimientos</span>
-        <button class="btn btn-ghost btn-sm" id="btn-csv"><i class="ti ti-download"></i>CSV del mes</button></div>
+        <span style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn btn-primary btn-sm" id="btn-sheet"><i class="ti ti-refresh"></i>Sincronizar hoja</button>
+        <button class="btn btn-ghost btn-sm" id="btn-csv"><i class="ti ti-download"></i>CSV del mes</button></span></div>
       <div class="filters">
         <select id="m-mes" class="select-sm" aria-label="Mes"></select>
         <select id="m-tipo" class="select-sm" aria-label="Tipo"><option value="">Todos</option><option value="gasto">Gastos</option><option value="ingreso">Ingresos</option></select>
@@ -393,6 +406,19 @@ textarea{resize:vertical;min-height:54px}
           <span class="hint">Se consulta al cargar un gasto en USD y queda guardada en ese movimiento. Siempre la podés corregir a mano.</span></div>
       </div>
 
+      <div class="section-label">Hoja del atajo (Google Sheets)</div>
+      <div class="panel">
+        <div class="form-grid">
+          <div class="fg full"><label for="c-sheet-url">URL del Apps Script (termina en /exec)</label><input id="c-sheet-url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></div>
+          <div class="fg full"><label for="c-sheet-key">Clave (SYNC_KEY)</label><input id="c-sheet-key" type="password" autocomplete="off" placeholder="la que pusiste en el script"></div>
+        </div>
+        <div class="form-actions" style="justify-content:flex-start">
+          <button class="btn btn-primary" id="btn-sheet-save"><i class="ti ti-device-floppy"></i>Guardar</button>
+          <button class="btn btn-ghost" id="btn-sheet-clear">Borrar</button>
+        </div>
+        <span class="hint">Se guarda solo en este dispositivo (no en la base de datos ni en el código). En el celular y en la compu la cargás una vez en cada uno.</span>
+      </div>
+
       <div class="section-label">Datos</div>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap">
         <button class="btn btn-ghost" id="btn-import"><i class="ti ti-database-import"></i>Importar desde MisFinanzas v1</button>
@@ -404,6 +430,7 @@ textarea{resize:vertical;min-height:54px}
   </main>
 </div>
 
+<div id="sync-overlay" class="hidden"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="config.js"></script>
@@ -914,6 +941,195 @@ async function importV1() {
   toast(`Importación lista: ${rows.length} movimientos revisados (los repetidos se omiten)`);
 }
 
+
+/* =====================================================================
+   SINCRONIZAR HOJA DEL ATAJO (Apps Script de solo lectura -> vista previa -> Supabase)
+   ===================================================================== */
+const normS = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+const sheetCfg = () => ({ url: localStorage.getItem('mf_sheet_url') || '', key: localStorage.getItem('mf_sheet_key') || '' });
+const mapKey = () => 'mf_sheetmap_' + S.ws.id;
+const loadMap = () => { try { return JSON.parse(localStorage.getItem(mapKey())) || { cat: {}, med: {} }; } catch (e) { return { cat: {}, med: {} }; } };
+
+function parseAmount(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? Math.abs(v) : NaN;
+  let t = String(v ?? '').replace(/usd|u\$s|us\$|ars|\$|\s/gi, '').replace(/^[-+]/, '');
+  if (!/^[\d.,]+$/.test(t)) return NaN;
+  const lc = t.lastIndexOf(','), ld = t.lastIndexOf('.');
+  if (lc >= 0 && ld >= 0) { const dec = lc > ld ? ',' : '.'; t = dec === ',' ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, ''); }
+  else if (lc >= 0) { t = /^\d{1,3}(,\d{3})+$/.test(t) ? t.replace(/,/g, '') : t.replace(',', '.'); }
+  else if (ld >= 0) { if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, ''); }
+  const n = Number(t);
+  return Number.isFinite(n) ? n : NaN;
+}
+function parseSheetDate(v) {
+  const t = String(v ?? '').trim(); let y, m, d, x;
+  if ((x = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) { y = +x[1]; m = +x[2]; d = +x[3]; }
+  else if ((x = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/))) { d = +x[1]; m = +x[2]; y = +x[3]; if (y < 100) y += 2000; }
+  else return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+function guessForma(medio) {
+  const n = normS(medio);
+  if (/credito/.test(n)) return 'credito'; if (/debito/.test(n)) return 'debito';
+  if (/transfer/.test(n)) return 'transferencia'; if (/efectivo|cash/.test(n)) return 'efectivo';
+  return 'otro';
+}
+function matchCat(name, map) {
+  const n = normS(name); if (!n) return null;
+  const mapped = map.cat[n]; if (mapped && S.cats.some((c) => c.id === mapped && !c.archived)) return S.cats.find((c) => c.id === mapped);
+  const act = S.cats.filter((c) => !c.archived);
+  const head = normS(String(name).split(' - ')[0]);
+  return act.find((c) => normS(c.name) === n) || act.find((c) => normS(c.name) === head) || null;
+}
+function matchMed(name, map) {
+  const n = normS(name); if (!n) return '';
+  const m = map.med[n];
+  if (m && ((m[0] === 'a' && accById(m.slice(2))) || (m[0] === 'c' && cardById(m.slice(2))))) return m;
+  const opts = [...S.cards.filter((c) => !c.archived).map((c) => ['c:' + c.id, normS(c.name)]), ...S.accounts.filter((a) => !a.archived).map((a) => ['a:' + a.id, normS(a.name)])];
+  return (opts.find((o) => o[1] === n) || opts.find((o) => o[1].length >= 3 && n.length >= 3 && (n.includes(o[1]) || o[1].includes(n))) || [''])[0];
+}
+
+let SY = null;
+async function syncSheet() {
+  const { url, key } = sheetCfg();
+  if (!url || !key) { toast('Primero cargá la URL y la clave de la hoja en Config', 'err'); $$('.tab-btn').find((b) => b.dataset.tab === 'config')?.click(); return; }
+  if (!S.ws) return;
+  toast('Leyendo la hoja…');
+  let u; try { u = new URL(url.trim()); } catch (e) { throw new Error('La URL de la hoja no es válida'); }
+  u.searchParams.set('key', key.trim());
+  let data;
+  try { const res = await fetch(u); data = await res.json(); }
+  catch (e) { throw new Error('No pude leer la hoja. Revisá la URL, que el script esté implementado como "Cualquier usuario" y tu conexión.'); }
+  if (!data || data.ok !== true) throw new Error('La hoja respondió: ' + ((data && data.error) || 'respuesta inesperada'));
+
+  const map = loadMap();
+  const known = new Set(S.txs.filter((t) => t.source === 'atajo' && t.external_id).map((t) => t.external_id));
+  const existing = new Set(S.txs.map((t) => `${t.occurred_on}|${t.amount.toFixed(2)}|${normS(t.description)}`));
+  const defSrc = localStorage.getItem('mf_fxsrc') || 'bolsa';
+  let fxDef = null; let fxErr = false;
+  const rows = [];
+  let already = 0;
+  for (const r of data.rows || []) {
+    if (known.has(r.id)) { already++; continue; }
+    const date = parseSheetDate(r.fecha); const amount = parseAmount(r.monto);
+    const raw = String(r.monto);
+    const usd = /usd|u\$s|dolar/i.test(String(r.moneda)) || /usd|u\$s|us\$/i.test(raw);
+    const cat = matchCat(r.categoria, map);
+    const med = matchMed(r.medio, map);
+    let forma = guessForma(r.medio); if (med[0] === 'c') forma = 'credito';
+    const row = {
+      id: r.id, fila: r.fila, include: true, date, concept: String(r.concepto || ''), amount, cur: usd ? 'USD' : 'ARS',
+      fx: '', fxSrc: '', kind: cat ? cat.kind : 'gasto', cat: cat ? cat.id : '', catName: r.categoria || '', med, medName: r.medio || '', forma,
+      reimb: !!normS(r.reintegra) && !/^(no|0|false|n)$/.test(normS(r.reintegra)), payer: localStorage.getItem('mf_payer') || 'Empleador'
+    };
+    if (usd) {
+      const c = parseAmount(r.cotizacion);
+      if (c > 0) { row.fx = c; row.fxSrc = 'hoja'; }
+      else {
+        if (!fxDef && !fxErr) { try { fxDef = await fetchFx(defSrc); } catch (e) { fxErr = true; } }
+        if (fxDef) { row.fx = fxDef.rate; row.fxSrc = fxDef.name + ' (al sincronizar)'; }
+      }
+    }
+    row.bad = !date || !(amount > 0);
+    if (row.bad) row.include = false;
+    row.dup = !row.bad && existing.has(`${date}|${amount.toFixed(2)}|${normS(row.concept)}`);
+    if (row.dup) row.include = false;
+    rows.push(row);
+  }
+  SY = { rows, already, tz: data.tz, hoja: data.hoja, fxErr };
+  if (!rows.length) { toast(already ? `No hay filas nuevas (${already} ya estaban cargadas)` : 'La hoja no tiene filas'); return; }
+  renderSync();
+}
+
+function syOpts(list, sel, blank) {
+  return (blank ? `<option value="">${blank}</option>` : '') + list.map(([v, l]) => `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(l)}</option>`).join('');
+}
+function renderSync() {
+  const o = $('#sync-overlay'); const y = SY;
+  const medList = [...S.cards.filter((c) => !c.archived).map((c) => ['c:' + c.id, '💳 ' + c.name]), ...S.accounts.filter((a) => !a.archived).map((a) => ['a:' + a.id, a.name])];
+  const formas = [['debito', 'Débito'], ['credito', 'Crédito'], ['transferencia', 'Transferencia'], ['efectivo', 'Efectivo'], ['otro', 'Otro']];
+  const items = y.rows.map((r, i) => {
+    const cats = S.cats.filter((c) => !c.archived && c.kind === r.kind).map((c) => [c.id, c.name]);
+    const amt = r.bad ? '<span class="chip" style="color:var(--red)">fila inválida</span>' : `${r.kind === 'ingreso' ? '+' : '−'}${r.cur === 'USD' ? 'USD ' + fmtD(r.amount) : fmtN(r.amount)}`;
+    return `<div class="sy-row${r.include ? '' : ' off'}${r.bad ? ' bad' : ''}" data-i="${i}">
+      <div class="sy-top"><input type="checkbox" data-f="include" ${r.include ? 'checked' : ''} ${r.bad ? 'disabled' : ''} aria-label="Incluir">
+        <div style="flex:1;min-width:0"><strong>${esc(r.concept) || '(sin concepto)'}</strong>
+          <div class="hint">Fila ${r.fila} · ${esc(r.date || 'fecha inválida: ' + '')} ${r.dup ? '· <span class="chip" style="background:var(--amber-bg);color:var(--amber)">Posible duplicado de uno ya cargado</span>' : ''} ${r.bad ? '· revisá fecha/monto en la hoja' : ''}</div></div>
+        <strong>${amt}</strong></div>
+      ${r.bad ? '' : `<div class="sy-grid">
+        <div class="fg"><label>Tipo</label><select data-f="kind"><option value="gasto"${r.kind === 'gasto' ? ' selected' : ''}>Gasto</option><option value="ingreso"${r.kind === 'ingreso' ? ' selected' : ''}>Ingreso</option></select></div>
+        <div class="fg"><label>Categoría${r.catName && !r.cat ? ' · «' + esc(r.catName) + '»' : ''}</label><select data-f="cat">${syOpts(cats, r.cat, '— sin categoría —')}</select></div>
+        <div class="fg"><label>Cuenta / tarjeta${r.medName && !r.med ? ' · «' + esc(r.medName) + '»' : ''}</label><select data-f="med">${syOpts(medList, r.med, '— sin asignar —')}</select></div>
+        <div class="fg"><label>Forma</label><select data-f="forma">${syOpts(formas, r.forma)}</select></div>
+        <div class="fg"><label>Moneda</label><select data-f="cur"><option${r.cur === 'ARS' ? ' selected' : ''}>ARS</option><option${r.cur === 'USD' ? ' selected' : ''}>USD</option></select></div>
+        ${r.cur === 'USD' ? `<div class="fg"><label>Cotización${r.fxSrc ? ' · ' + esc(r.fxSrc) : ''}</label><input data-f="fx" type="number" inputmode="decimal" step="any" value="${esc(r.fx)}" placeholder="ARS por USD"></div>` : ''}
+        ${r.kind === 'gasto' ? `<div class="fg"><label>A reintegrar</label><label style="text-transform:none;font-weight:500;display:flex;gap:.4rem;align-items:center"><input type="checkbox" data-f="reimb" style="width:auto" ${r.reimb ? 'checked' : ''}>por <input data-f="payer" value="${esc(r.payer)}" style="padding:.3rem .5rem" ${r.reimb ? '' : 'disabled'}></label></div>` : ''}
+      </div>`}
+    </div>`;
+  }).join('');
+  o.innerHTML = `<div class="wrap">
+    <div class="page-head"><span class="page-title">Revisar antes de guardar</span><button class="btn btn-ghost btn-sm" id="sy-close"><i class="ti ti-x"></i>Cancelar</button></div>
+    <p class="hint" style="margin-bottom:.8rem">Hoja «${esc(y.hoja)}» · ${y.rows.length} filas nuevas${y.already ? ` · ${y.already} ya cargadas antes (omitidas)` : ''}. Nada se guarda hasta que confirmes. Los posibles duplicados y las filas inválidas vienen sin tildar.${y.fxErr ? ' <strong style="color:var(--red)">No pude traer la cotización del dólar: cargala a mano en las filas en USD.</strong>' : ''}</p>
+    ${items}
+    <div class="sy-bar"><span class="hint" id="sy-count"></span><span style="display:flex;gap:.5rem"><button class="btn btn-ghost btn-sm" id="sy-all">Tildar / destildar todo</button><button class="btn btn-primary" id="sy-save"><i class="ti ti-check"></i>Guardar</button></span></div>
+  </div>`;
+  o.classList.remove('hidden'); document.body.style.overflow = 'hidden';
+  updSyCount();
+}
+function updSyCount() { const n = SY.rows.filter((r) => r.include && !r.bad).length; const el = $('#sy-count'); if (el) el.textContent = `${n} de ${SY.rows.length} para guardar`; }
+function closeSync() { $('#sync-overlay').classList.add('hidden'); $('#sync-overlay').innerHTML = ''; document.body.style.overflow = ''; SY = null; }
+
+function onSyChange(e) {
+  const el = e.target; const f = el.dataset.f; if (!f || !SY) return;
+  const row = el.closest('.sy-row'); const r = SY.rows[+row.dataset.i];
+  const val = el.type === 'checkbox' ? el.checked : el.value;
+  r[f] = val;
+  if (f === 'kind') { const c = S.cats.find((x) => x.id === r.cat); if (!c || c.kind !== val) r.cat = ''; if (val === 'ingreso') r.reimb = false; }
+  if (f === 'med') { if (val[0] === 'c') r.forma = 'credito'; else if (r.forma === 'credito') r.forma = 'otro'; }
+  if (f === 'cur' && val === 'USD' && !(Number(r.fx) > 0)) {
+    fetchFx(localStorage.getItem('mf_fxsrc') || 'bolsa').then((x) => { if (!(Number(r.fx) > 0)) { r.fx = x.rate; r.fxSrc = x.name + ' (al sincronizar)'; if (SY) renderSync(); } }).catch(() => {});
+  }
+  if (f === 'fx') { r.fxSrc = 'manual'; return; }
+  if (f === 'payer') return;
+  if (['kind', 'med', 'cur', 'reimb', 'forma'].includes(f)) renderSync(); else { row.classList.toggle('off', !r.include); updSyCount(); }
+}
+
+async function saveSync() {
+  if (!SY) return;
+  const sel = SY.rows.filter((r) => r.include && !r.bad);
+  if (!sel.length) return toast('No hay filas tildadas', 'err');
+  for (const r of sel) {
+    if (r.cur === 'USD' && !(Number(r.fx) > 0)) return toast(`Fila ${r.fila}: falta la cotización del dólar`, 'err');
+    if (r.reimb && !String(r.payer).trim()) return toast(`Fila ${r.fila}: falta quién reintegra`, 'err');
+  }
+  const ws = S.ws.id;
+  const payload = sel.map((r) => ({
+    workspace_id: ws, kind: r.kind, status: 'confirmado', occurred_on: r.date, amount: r.amount, currency: r.cur,
+    fx_rate: r.cur === 'USD' ? Number(r.fx) : null, fx_source: r.cur === 'USD' ? (r.fxSrc || 'manual') : null,
+    description: r.concept, notes: '', tags: [],
+    category_id: r.cat || null, account_id: r.med[0] === 'a' ? r.med.slice(2) : null, card_id: r.med[0] === 'c' ? r.med.slice(2) : null,
+    payment_method: r.kind === 'gasto' ? r.forma : null, expense_type: r.kind === 'gasto' ? 'variable' : null,
+    reimbursable_by: r.kind === 'gasto' && r.reimb ? String(r.payer).trim() : null,
+    source: 'atajo', external_id: r.id
+  }));
+  const inserted = [];
+  for (let i = 0; i < payload.length; i += 200) {
+    const got = must(await sb.from('transactions').upsert(payload.slice(i, i + 200), { onConflict: 'workspace_id,source,external_id', ignoreDuplicates: true }).select());
+    inserted.push(...(got || []));
+  }
+  // recordar equivalencias hoja -> app
+  const map = loadMap();
+  sel.forEach((r) => { if (r.cat && r.catName) map.cat[normS(r.catName)] = r.cat; if (r.med && r.medName) map.med[normS(r.medName)] = r.med; });
+  try { localStorage.setItem(mapKey(), JSON.stringify(map)); } catch (e) { /* sin almacenamiento: no pasa nada */ }
+  inserted.forEach((t) => S.txs.push(normTx(t)));
+  S.txs.sort((a, b) => b.occurred_on.localeCompare(a.occurred_on));
+  const skipped = sel.length - inserted.length;
+  closeSync(); fillMonthSelects(); renderAll();
+  toast(`Listo: ${inserted.length} movimientos guardados${skipped ? ` · ${skipped} ya existían` : ''}`);
+}
+
 /* =====================================================================
    ARRANQUE
    ===================================================================== */
@@ -1013,6 +1229,22 @@ function bindEvents() {
   }, e.currentTarget);
   $('#c-fxsrc').onchange = () => { localStorage.setItem('mf_fxsrc', $('#c-fxsrc').value); $('#f-fxsrc').value = $('#c-fxsrc').value; toast('Guardado'); };
   $('#btn-import').onclick = (e) => guard(importV1, e.currentTarget);
+  $('#btn-sheet').onclick = (e) => guard(syncSheet, e.currentTarget);
+  $('#c-sheet-url').value = localStorage.getItem('mf_sheet_url') || ''; $('#c-sheet-key').value = localStorage.getItem('mf_sheet_key') || '';
+  $('#btn-sheet-save').onclick = () => {
+    const u = $('#c-sheet-url').value.trim(), k = $('#c-sheet-key').value.trim();
+    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(u)) return toast('La URL tiene que empezar con https://script.google.com/…', 'err');
+    if (!k) return toast('Falta la clave', 'err');
+    localStorage.setItem('mf_sheet_url', u); localStorage.setItem('mf_sheet_key', k); toast('Guardado en este dispositivo ✓');
+  };
+  $('#btn-sheet-clear').onclick = () => { localStorage.removeItem('mf_sheet_url'); localStorage.removeItem('mf_sheet_key'); $('#c-sheet-url').value = ''; $('#c-sheet-key').value = ''; toast('Borrado'); };
+  $('#sync-overlay').addEventListener('change', onSyChange);
+  $('#sync-overlay').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'sy-close') closeSync();
+    else if (b.id === 'sy-all') { const on = !SY.rows.filter((r) => !r.bad).every((r) => r.include); SY.rows.forEach((r) => { if (!r.bad) r.include = on; }); renderSync(); }
+    else if (b.id === 'sy-save') guard(saveSync, b);
+  });
   $('#btn-json').onclick = () => download('misfinanzas-backup.json', JSON.stringify({ exportado: new Date().toISOString(), espacio: S.ws, categorias: S.cats, cuentas: S.accounts, tarjetas: S.cards, presupuestos: S.budgets, movimientos: S.txs, reintegros: S.reimb }, null, 2), 'application/json');
   // Delegación de eventos para botones generados dinámicamente
   document.addEventListener('click', (e) => {
