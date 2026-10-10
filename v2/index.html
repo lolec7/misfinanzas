@@ -406,6 +406,16 @@ textarea{resize:vertical;min-height:54px}
           <span class="hint">Se consulta al cargar un gasto en USD y queda guardada en ese movimiento. Siempre la podés corregir a mano.</span></div>
       </div>
 
+      <div class="section-label">Atajo del iPhone (captura directa)</div>
+      <div class="panel">
+        <p class="hint" style="margin-bottom:.7rem">El atajo envía cada gasto directo a tu base de datos con un token propio: solo puede registrar gastos, no leer nada. El token se muestra una sola vez; si lo perdés, revocalo y generá otro.</p>
+        <div class="form-actions" style="justify-content:flex-start;margin:0 0 .7rem;padding:0;border:0">
+          <button class="btn btn-primary" id="btn-newtok"><i class="ti ti-key"></i>Generar token nuevo</button>
+        </div>
+        <div id="c-token-new" class="hidden"></div>
+        <div id="c-tokens"></div>
+      </div>
+
       <div class="section-label">Hoja del atajo (Google Sheets)</div>
       <div class="panel">
         <div class="form-grid">
@@ -861,6 +871,8 @@ function renderConfig() {
   $('#c-cards').innerHTML = S.cards.length ? S.cards.map((c) => archRow(c, 'cards', c.name, `${c.network}${c.closing_day ? ' · cierre día ' + c.closing_day : ''}${c.due_day ? ' · vence día ' + c.due_day : ''}`)).join('') : '<p class="hint">Sin tarjetas todavía.</p>';
   $('#c-fxsrc').value = localStorage.getItem('mf_fxsrc') || 'bolsa';
   $('#c-user').textContent = S.user ? `Sesión iniciada como ${S.user.email}` : '';
+  $('#c-token-new').classList.add('hidden'); $('#c-token-new').innerHTML = '';
+  loadTokens().catch(() => {});
 }
 async function addRow(table, row, list) {
   const saved = must(await sb.from(table).insert({ workspace_id: S.ws.id, ...row }).select().single());
@@ -945,7 +957,7 @@ async function importV1() {
 /* =====================================================================
    SINCRONIZAR HOJA DEL ATAJO (Apps Script de solo lectura -> vista previa -> Supabase)
    ===================================================================== */
-const normS = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+const normS = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\p{L}\p{N}\s,\-]/gu, '').replace(/\s+/g, ' ').trim(); // sin emojis ni símbolos
 const sheetCfg = () => ({ url: localStorage.getItem('mf_sheet_url') || '', key: localStorage.getItem('mf_sheet_key') || '' });
 const mapKey = () => 'mf_sheetmap_' + S.ws.id;
 const loadMap = () => { try { return JSON.parse(localStorage.getItem(mapKey())) || { cat: {}, med: {} }; } catch (e) { return { cat: {}, med: {} }; } };
@@ -1130,6 +1142,34 @@ async function saveSync() {
   toast(`Listo: ${inserted.length} movimientos guardados${skipped ? ` · ${skipped} ya existían` : ''}`);
 }
 
+
+/* ---------- Atajo del iPhone: tokens de captura ---------- */
+const captureUrl = () => String((window.MF_CONFIG || {}).SUPABASE_URL || '').trim().replace(/\/$/, '') + '/rest/v1/rpc/capture_expense';
+async function copyText(txt) {
+  try { await navigator.clipboard.writeText(txt); toast('Copiado ✓'); }
+  catch (e) { prompt('Copiá este texto:', txt); }
+}
+async function loadTokens() {
+  const box = $('#c-tokens'); if (!box || !S.ws) return;
+  const { data, error } = await sb.from('capture_tokens').select('id,label,created_at,last_used_at,revoked_at').eq('workspace_id', S.ws.id).order('created_at', { ascending: false });
+  if (error) { box.innerHTML = '<p class="hint">Todavía no está activada la captura directa: corré el archivo 03_captura_atajo.sql en Supabase.</p>'; return; }
+  box.innerHTML = data.length ? data.map((t) => `<div class="list-row"><div><div>${esc(t.label)} ${t.revoked_at ? '<span class="chip">revocado</span>' : '<span class="chip" style="color:var(--green)">activo</span>'}</div>
+    <div class="sub">creado ${esc(fmtD2(t.created_at))} · ${t.last_used_at ? 'último uso ' + esc(fmtD2(t.last_used_at)) : 'sin usar'}</div></div>
+    ${t.revoked_at ? '' : `<button class="btn btn-danger btn-xs" data-revoketok="${t.id}">Revocar</button>`}</div>`).join('') : '<p class="hint">Sin tokens todavía.</p>';
+}
+const fmtD2 = (iso) => { const d = new Date(iso); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+async function newToken() {
+  const tok = must(await sb.rpc('create_capture_token', { p_workspace: S.ws.id, p_label: 'Atajo iPhone' }));
+  const key = String((window.MF_CONFIG || {}).SUPABASE_ANON_KEY || '');
+  const row = (label, val) => `<div class="fg" style="margin-bottom:.5rem"><label>${label}</label><div style="display:flex;gap:.4rem"><input readonly value="${esc(val)}" onfocus="this.select()"><button class="btn btn-ghost btn-sm" data-copy="${esc(val)}">Copiar</button></div></div>`;
+  const n = $('#c-token-new');
+  n.innerHTML = `<div style="background:var(--amber-bg);border:0.5px solid var(--amber-bd);border-radius:var(--r-sm);padding:.8rem;margin-bottom:.8rem">
+    <strong style="color:var(--amber)">Copiá el token ahora: no se vuelve a mostrar.</strong>
+    ${row('Token', tok)}${row('URL', captureUrl())}${row('apikey (clave pública de este proyecto)', key)}</div>`;
+  n.classList.remove('hidden');
+  await loadTokens();
+}
+
 /* =====================================================================
    ARRANQUE
    ===================================================================== */
@@ -1229,6 +1269,12 @@ function bindEvents() {
   }, e.currentTarget);
   $('#c-fxsrc').onchange = () => { localStorage.setItem('mf_fxsrc', $('#c-fxsrc').value); $('#f-fxsrc').value = $('#c-fxsrc').value; toast('Guardado'); };
   $('#btn-import').onclick = (e) => guard(importV1, e.currentTarget);
+  $('#btn-newtok').onclick = (e) => guard(newToken, e.currentTarget);
+  $('#tab-config').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-copy]'); if (c) return copyText(c.dataset.copy);
+    const r = e.target.closest('[data-revoketok]');
+    if (r && confirm('¿Revocar este token? El atajo que lo use va a dejar de funcionar.')) guard(async () => { must(await sb.rpc('revoke_capture_token', { p_id: r.dataset.revoketok })); await loadTokens(); toast('Token revocado'); }, r);
+  });
   $('#btn-sheet').onclick = (e) => guard(syncSheet, e.currentTarget);
   $('#c-sheet-url').value = localStorage.getItem('mf_sheet_url') || ''; $('#c-sheet-key').value = localStorage.getItem('mf_sheet_key') || '';
   $('#btn-sheet-save').onclick = () => {
