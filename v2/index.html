@@ -151,6 +151,8 @@ textarea{resize:vertical;min-height:54px}
 .chip.fijo{background:var(--blue-bg);color:var(--blue);border-color:#cfdcf3}
 .chip.variable{background:var(--amber-bg);color:var(--amber);border-color:var(--amber-bd)}
 .chip.proj{background:#fff;color:var(--text3);border-style:dashed}
+button.chip{font-family:inherit;cursor:pointer;-webkit-appearance:none;appearance:none;min-height:24px;padding:.2rem .65rem}
+button.chip:active{opacity:.6}
 .tx-amt{text-align:right;font-family:'DM Mono',monospace;font-weight:600;white-space:nowrap}
 .tx-amt.g{color:var(--red)}.tx-amt.i{color:var(--green)}
 .tx-amt small{display:block;font-size:10px;font-weight:400;color:var(--text3)}
@@ -307,7 +309,8 @@ textarea{resize:vertical;min-height:54px}
             <span class="hint" id="f-fxhint"></span>
           </div>
           <div class="fg" id="g-sub"><label for="f-sub">Tipo de gasto</label>
-            <select id="f-sub"><option value="variable">Variable</option><option value="fijo">Fijo</option></select></div>
+            <select id="f-sub"><option value="variable">Variable</option><option value="fijo">Fijo</option></select>
+            <span class="hint" id="f-subhint"></span></div>
           <div class="fg" id="g-medio"><label for="f-medio">Medio de pago</label>
             <select id="f-medio"><option value="debito">Débito</option><option value="credito">Tarjeta de crédito</option>
               <option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option><option value="otro">Otro</option></select></div>
@@ -339,6 +342,7 @@ textarea{resize:vertical;min-height:54px}
       </div>
       <div class="panel" style="padding:0" id="m-list"></div>
       <p class="hint" style="margin-top:.5rem" id="m-count"></p>
+      <p class="hint" style="margin-top:.25rem">Tip: tocá «fijo» o «variable» en un gasto para cambiarlo. La app lo recuerda para ese concepto.</p>
     </section>
 
     <!-- PRESUPUESTOS -->
@@ -467,7 +471,7 @@ const PALETTE = ['#2a4494', '#1a6644', '#b83232', '#8a5a0a', '#6b3ea0', '#1878aa
 const S = {
   user: null, workspaces: [], ws: null,
   cats: [], accounts: [], cards: [], budgets: [], txs: [], reimb: [], reimbOff: new Set(),
-  tipo: 'gasto', fxCache: {}, booted: false
+  tipo: 'gasto', fxCache: {}, booted: false, subTouched: false
 };
 let sb = null;
 
@@ -747,6 +751,38 @@ function clearForm() {
   ['f-monto', 'f-desc', 'f-tags', 'f-notes'].forEach((id) => { $('#' + id).value = ''; });
   $('#f-fecha').value = localDate();
   $('#f-reimb').checked = false; $('#f-payer').classList.add('hidden');
+  $('#f-sub').value = 'variable'; S.subTouched = false; $('#f-subhint').textContent = '';
+}
+/* Fijo / variable por concepto: la app recuerda el tipo del ÚLTIMO gasto confirmado con el
+   mismo concepto (comparado sin tildes, mayúsculas ni símbolos). No hay tabla aparte: la
+   fuente de verdad es el historial, así que nunca se desincroniza. El atajo del iPhone hace
+   la misma búsqueda en el servidor (sql/05). */
+function rememberedType(desc) {
+  const k = normS(desc); if (k.length < 2) return null;
+  let best = null;
+  for (const t of S.txs) {
+    if (t.kind !== 'gasto' || t.status !== 'confirmado' || !t.expense_type || normS(t.description) !== k) continue;
+    if (!best || t.occurred_on > best.occurred_on || (t.occurred_on === best.occurred_on && String(t.created_at) > String(best.created_at))) best = t;
+  }
+  return best ? { type: best.expense_type, name: best.description } : null;
+}
+function applyRemembered() {
+  if (S.tipo !== 'gasto' || S.subTouched) return; // si lo elegiste vos, no se pisa
+  const r = rememberedType($('#f-desc').value);
+  $('#f-sub').value = r ? r.type : 'variable';
+  $('#f-subhint').textContent = r ? `Recordado: ${r.type} (según tus gastos anteriores de «${r.name}»)` : '';
+}
+async function toggleType(id) {
+  const t = S.txs.find((x) => x.id === id); if (!t || t.kind !== 'gasto') return;
+  const nuevo = t.expense_type === 'fijo' ? 'variable' : 'fijo';
+  const k = normS(t.description);
+  // Un concepto = un tipo: se cambian todos los gastos con el mismo concepto, para que el historial sea coherente.
+  const ids = S.txs.filter((x) => x.kind === 'gasto' && x.expense_type && x.expense_type !== nuevo && (x.id === id || (k && normS(x.description) === k))).map((x) => x.id);
+  if (ids.length > 1 && !confirm(`«${t.description}» aparece en ${ids.length} gastos. ¿Marcarlos todos como ${nuevo}?`)) return;
+  must(await sb.from('transactions').update({ expense_type: nuevo }).in('id', ids));
+  S.txs.forEach((x) => { if (ids.includes(x.id)) x.expense_type = nuevo; });
+  renderResumen(); renderMovs(); renderBudgets();
+  toast(k ? `«${t.description}» ahora es ${nuevo}. Lo voy a recordar ✓` : `Marcado como ${nuevo} ✓`);
 }
 async function saveTx() {
   const amount = parseFloat($('#f-monto').value);
@@ -798,7 +834,7 @@ function renderMovs() {
     return `<div class="tx">
       <div class="tx-date">${t.occurred_on.slice(8, 10)}/${t.occurred_on.slice(5, 7)}</div>
       <div class="tx-main"><div class="tx-desc">${esc(t.description) || '<span style="color:var(--text3)">Sin descripción</span>'}</div>
-        <div class="tx-meta">${c ? `<span class="chip">${esc(c.name)}</span>` : ''}${t.expense_type ? `<span class="chip ${t.expense_type}">${t.expense_type}</span>` : ''}
+        <div class="tx-meta">${c ? `<span class="chip">${esc(c.name)}</span>` : ''}${t.expense_type ? `<button type="button" class="chip ${t.expense_type}" data-togtype="${t.id}" title="Tocá para cambiar entre fijo y variable">${t.expense_type}</button>` : ''}
           ${k ? `<span class="chip">${esc(k.name)}</span>` : a ? `<span class="chip">${esc(a.name)}</span>` : ''}
           ${t.reimbursable_by ? `<span class="chip proj">${t.reimbursement_id ? 'reintegrado' : 'a reintegrar'} · ${esc(t.reimbursable_by)}</span>` : ''}
           ${t.status === 'proyectado' ? '<span class="chip proj">proyectado</span>' : ''}${t.tags.map((x) => `<span class="chip">#${esc(x)}</span>`).join('')}</div></div>
@@ -1239,6 +1275,8 @@ function bindEvents() {
   ['m-mes', 'm-tipo', 'm-cat'].forEach((id) => ($('#' + id).onchange = renderMovs));
   $('#tp-gasto').onclick = () => setTipo('gasto'); $('#tp-ingreso').onclick = () => setTipo('ingreso');
   $('#f-medio').onchange = onMedioChange; $('#f-moneda').onchange = onMonedaChange;
+  $('#f-desc').oninput = applyRemembered;
+  $('#f-sub').onchange = () => { S.subTouched = true; $('#f-subhint').textContent = ''; };
   $('#f-fxsrc').onchange = () => { localStorage.setItem('mf_fxsrc', $('#f-fxsrc').value); refreshFx(); };
   $('#btn-clear').onclick = clearForm;
   $('#f-reimb').onchange = () => { const on = $('#f-reimb').checked; $('#f-payer').classList.toggle('hidden', !on); if (on && !$('#f-payer').value) $('#f-payer').value = localStorage.getItem('mf_payer') || 'Empleador'; };
@@ -1294,8 +1332,9 @@ function bindEvents() {
   $('#btn-json').onclick = () => download('misfinanzas-backup.json', JSON.stringify({ exportado: new Date().toISOString(), espacio: S.ws, categorias: S.cats, cuentas: S.accounts, tarjetas: S.cards, presupuestos: S.budgets, movimientos: S.txs, reintegros: S.reimb }, null, 2), 'application/json');
   // Delegación de eventos para botones generados dinámicamente
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-switch],[data-undoreimb],#btn-reimb'); if (!t) return;
+    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
     if (t.id === 'btn-reimb') return guard(registerReimb, t);
+    if (t.dataset.togtype) return guard(() => toggleType(t.dataset.togtype));
     if (t.dataset.undoreimb) return guard(() => undoReimb(t.dataset.undoreimb));
     if (t.dataset.del) guard(() => deleteTx(t.dataset.del));
     else if (t.dataset.delbudget) guard(() => deleteBudget(t.dataset.delbudget));
