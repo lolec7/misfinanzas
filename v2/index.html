@@ -123,6 +123,11 @@ textarea{resize:vertical;min-height:54px}
 .acc-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);padding:.85rem .95rem}
 .acc-ico{width:30px;height:30px;border-radius:var(--r-sm);background:var(--accent-light);display:flex;align-items:center;justify-content:center;margin-bottom:.5rem}
 .acc-ico i{font-size:16px;color:var(--accent)}
+.acc-ico.has-logo{background:transparent}
+.acc-ico img,.logo-sm{width:30px;height:30px;border-radius:var(--r-sm);object-fit:contain;display:block}
+.logo-sm{width:26px;height:26px;margin-right:.55rem;flex:none}
+.row-l{display:flex;align-items:center;min-width:0}
+.row-btns{display:flex;gap:.3rem;align-items:center;flex:none}
 .acc-name{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px}
 .acc-bal{font-size:17px;font-weight:600;font-family:'DM Mono',monospace;letter-spacing:-.3px}
 .acc-bal.pos{color:var(--green)}.acc-bal.neg{color:var(--red)}
@@ -616,7 +621,7 @@ function renderResumen() {
   S.reimb.forEach((r) => { if (r.account_id && bals[r.account_id]) bals[r.account_id][r.currency] += r.amount; });
   const accHtml = Object.entries(bals).map(([id, b]) => {
     const a = accById(id); const main = a.currency === 'USD' ? 'USD' : 'ARS'; const other = main === 'ARS' ? 'USD' : 'ARS';
-    return `<div class="acc-card"><div class="acc-ico"><i class="ti ti-${a.kind === 'efectivo' ? 'cash' : a.kind === 'billetera' ? 'wallet' : a.kind === 'inversion' ? 'chart-line' : 'building-bank'}"></i></div>
+    return `<div class="acc-card"><div class="acc-ico ${a.logo ? 'has-logo' : ''}">${accIcon(a)}</div>
       <div class="acc-name">${esc(a.name)}</div>
       <div class="acc-bal ${b[main] >= 0 ? 'pos' : 'neg'}">${fmtN(b[main])} <span style="font-size:11px;font-weight:400">${main}</span></div>
       ${Math.abs(b[other]) > 0.004 ? `<div class="acc-sub">${fmtN(b[other])} ${other}</div>` : ''}</div>`;
@@ -895,6 +900,39 @@ async function deleteBudget(id) {
 /* =====================================================================
    CONFIG
    ===================================================================== */
+const accIcon = (a) => a.logo && /^data:image\/(png|webp|jpeg);base64,/.test(a.logo)
+  ? `<img src="${a.logo}" alt="">`
+  : `<i class="ti ti-${a.kind === 'efectivo' || a.kind === 'billetera' ? 'wallet' : a.kind === 'inversion' ? 'chart-line' : 'building-bank'}"></i>`;
+function accRow(a) {
+  const ico = a.logo ? accIcon(a).replace('<img ', '<img class="logo-sm" ') : '';
+  return `<div class="list-row ${a.archived ? 'arch' : ''}"><div class="row-l">${ico}<div><div>${esc(a.name)}</div><div class="sub">${esc(`${a.kind} · ${a.currency} · saldo inicial ${fmtN(a.opening_balance)}`)}</div></div></div>
+    <div class="row-btns"><label class="btn btn-ghost btn-xs" style="cursor:pointer">${a.logo ? 'Cambiar logo' : 'Logo'}<input type="file" accept="image/*" class="hidden" data-logo="${a.id}"></label>
+    ${a.logo ? `<button class="btn btn-ghost btn-xs" data-nologo="${a.id}">Quitar</button>` : ''}
+    <button class="btn btn-ghost btn-xs" data-arch="accounts:${a.id}">${a.archived ? 'Restaurar' : 'Archivar'}</button></div></div>`;
+}
+// Imagen elegida -> cuadrado de 96px (sin recortar, fondo transparente) -> data URL chica
+function logoFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => {
+      try {
+        const N = 96, c = document.createElement('canvas'); c.width = c.height = N;
+        const k = Math.min(N / img.width, N / img.height), w = img.width * k, h = img.height * k;
+        c.getContext('2d').drawImage(img, (N - w) / 2, (N - h) / 2, w, h);
+        let out = c.toDataURL('image/webp', 0.9); if (!out.startsWith('data:image/webp')) out = c.toDataURL('image/png');
+        if (out.length > 60000) throw new Error('La imagen resultó demasiado pesada');
+        resolve(out);
+      } catch (err) { reject(err); } finally { URL.revokeObjectURL(url); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No pude leer esa imagen (probá con PNG o JPG)')); };
+    img.src = url;
+  });
+}
+async function setLogo(id, logo) {
+  must(await sb.from('accounts').update({ logo }).eq('id', id));
+  const a = accById(id); if (a) a.logo = logo;
+  renderConfig(); renderResumen();
+}
 function archRow(item, table, title, sub) {
   return `<div class="list-row ${item.archived ? 'arch' : ''}"><div><div>${esc(title)}</div><div class="sub">${esc(sub)}</div></div>
     <button class="btn btn-ghost btn-xs" data-arch="${table}:${item.id}">${item.archived ? 'Restaurar' : 'Archivar'}</button></div>`;
@@ -903,7 +941,7 @@ function renderConfig() {
   $('#c-spaces').innerHTML = S.workspaces.map((w) => `<div class="list-row"><div><div>${esc(w.name)}${w.id === S.ws.id ? ' <span class="chip">activo</span>' : ''}</div>
     <div class="sub">${w.kind === 'negocio' ? 'Negocio' : 'Personal'}</div></div>${w.id === S.ws.id ? '' : `<button class="btn btn-ghost btn-xs" data-switch="${w.id}">Abrir</button>`}</div>`).join('');
   $('#c-cats').innerHTML = S.cats.length ? S.cats.map((c) => archRow(c, 'categories', c.name, c.kind === 'gasto' ? 'Gasto' : 'Ingreso')).join('') : '<p class="hint">Sin categorías todavía.</p>';
-  $('#c-accs').innerHTML = S.accounts.length ? S.accounts.map((a) => archRow(a, 'accounts', a.name, `${a.kind} · ${a.currency} · saldo inicial ${fmtN(a.opening_balance)}`)).join('') : '<p class="hint">Sin cuentas todavía.</p>';
+  $('#c-accs').innerHTML = S.accounts.length ? S.accounts.map(accRow).join('') : '<p class="hint">Sin cuentas todavía.</p>';
   $('#c-cards').innerHTML = S.cards.length ? S.cards.map((c) => archRow(c, 'cards', c.name, `${c.network}${c.closing_day ? ' · cierre día ' + c.closing_day : ''}${c.due_day ? ' · vence día ' + c.due_day : ''}`)).join('') : '<p class="hint">Sin tarjetas todavía.</p>';
   $('#c-fxsrc').value = localStorage.getItem('mf_fxsrc') || 'bolsa';
   $('#c-user').textContent = S.user ? `Sesión iniciada como ${S.user.email}` : '';
@@ -1332,8 +1370,9 @@ function bindEvents() {
   $('#btn-json').onclick = () => download('misfinanzas-backup.json', JSON.stringify({ exportado: new Date().toISOString(), espacio: S.ws, categorias: S.cats, cuentas: S.accounts, tarjetas: S.cards, presupuestos: S.budgets, movimientos: S.txs, reintegros: S.reimb }, null, 2), 'application/json');
   // Delegación de eventos para botones generados dinámicamente
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
+    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-nologo],[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
     if (t.id === 'btn-reimb') return guard(registerReimb, t);
+    if (t.dataset.nologo) return guard(() => setLogo(t.dataset.nologo, null));
     if (t.dataset.togtype) return guard(() => toggleType(t.dataset.togtype));
     if (t.dataset.undoreimb) return guard(() => undoReimb(t.dataset.undoreimb));
     if (t.dataset.del) guard(() => deleteTx(t.dataset.del));
@@ -1342,6 +1381,8 @@ function bindEvents() {
     else if (t.dataset.switch) guard(() => switchWorkspace(t.dataset.switch));
   });
   document.addEventListener('change', (e) => {
+    const lf = e.target.closest('[data-logo]');
+    if (lf) { const f = lf.files && lf.files[0]; lf.value = ''; if (f) guard(async () => setLogo(lf.dataset.logo, await logoFromFile(f))); return; }
     const c = e.target.closest('[data-reimbsel]'); if (!c) return;
     c.checked ? S.reimbOff.delete(c.dataset.reimbsel) : S.reimbOff.add(c.dataset.reimbsel); renderReimb();
   });
