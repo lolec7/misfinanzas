@@ -177,6 +177,13 @@ button.chip:active{opacity:.6}
 .plan .bar-bg{height:9px;border-radius:5px}.plan .bar-fill{border-radius:5px;background:var(--accent)}
 .plan.done .bar-fill{background:#1a6644}
 .plan-foot{display:flex;justify-content:space-between;gap:.5rem;font-size:11.5px;color:var(--text2);margin-top:.4rem;flex-wrap:wrap}
+.stm{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);padding:.8rem .95rem;margin-bottom:.6rem}
+.stm-head{display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start;margin-bottom:.5rem}
+.stm .fg{margin-bottom:.5rem}
+.warn-box{background:var(--amber-bg);border:0.5px solid var(--amber-bd);color:var(--amber);border-radius:var(--r-sm);padding:.5rem .7rem;font-size:12px;margin:.5rem 0}
+.mini-plan{padding:.45rem 0;border-bottom:0.5px solid var(--border)}.mini-plan:last-child{border-bottom:none}
+.mini-top{display:flex;justify-content:space-between;gap:.5rem;font-size:13px;margin-bottom:.3rem}
+.mini-plan .bar-bg{height:7px;border-radius:4px}.mini-plan .bar-fill{border-radius:4px;background:var(--accent)}
 .month-row{display:flex;justify-content:space-between;font-size:13px;padding:.3rem 0;border-bottom:0.5px solid var(--border)}
 .month-row:last-child{border-bottom:none}
 .bar-ok{background:#1a6644}.bar-warn{background:#b87a0a}.bar-over{background:#b83232}
@@ -291,6 +298,7 @@ button.chip:active{opacity:.6}
       <div class="metrics" id="r-metrics"></div>
       <div id="r-reimb"></div>
       <div class="accounts" id="r-accounts"></div>
+      <div id="r-cuotas"></div>
       <div class="charts">
         <div class="chart-card"><div class="chart-label">Gastos por categoría</div><div class="legend" id="r-legend"></div>
           <div style="position:relative;height:190px"><canvas id="ch-cat" role="img" aria-label="Gastos por categoría del mes"></canvas></div></div>
@@ -370,6 +378,15 @@ button.chip:active{opacity:.6}
       <details id="q-done-box" class="hidden" style="margin-bottom:1rem"><summary class="hint" style="cursor:pointer;margin-bottom:.5rem">Planes terminados</summary><div id="q-done"></div></details>
 
       <div class="panel" style="margin-bottom:1rem">
+        <div class="page-title" style="font-size:14px;margin-bottom:.5rem">Cargar resumen de tarjeta</div>
+        <p class="hint" style="margin-bottom:.6rem">Elegí el PDF del resumen (Santander Visa o American Express). Se lee en tu dispositivo; te muestro lo que encontré y, si confirmás, lo guardo en el archivo.</p>
+        <label class="btn btn-primary" style="cursor:pointer"><i class="ti ti-file-upload"></i>Elegir PDF<input type="file" id="q-file" accept="application/pdf,.pdf" class="hidden"></label>
+        <div id="q-preview" style="margin-top:.8rem"></div>
+      </div>
+      <div id="q-pending"></div>
+      <details id="q-archive-box" class="hidden" style="margin-bottom:1rem"><summary class="hint" style="cursor:pointer;margin-bottom:.5rem">📁 Archivo de resúmenes</summary><div id="q-archive"></div></details>
+      <details style="margin-bottom:1rem"><summary class="hint" style="cursor:pointer;margin-bottom:.5rem">Opciones manuales (sin PDF)</summary>
+      <div class="panel" style="margin:.5rem 0 1rem">
         <div class="page-title" style="font-size:14px;margin-bottom:.5rem">Registrar pago de un resumen</div>
         <p class="hint" style="margin-bottom:.6rem">Las cuotas de ese vencimiento pasan a pagadas y cuentan como gasto en la fecha de pago.</p>
         <div class="add-row">
@@ -388,6 +405,7 @@ button.chip:active{opacity:.6}
         <div class="fg" style="margin-bottom:.6rem"><label for="q-json">Texto a pegar</label><textarea id="q-json" rows="6" style="width:100%;font-family:'DM Mono',monospace;font-size:12px" placeholder='[{"description":"…","installments":3,…}]'></textarea></div>
         <button class="btn btn-primary" id="btn-qimport"><i class="ti ti-file-import"></i>Importar</button>
       </div>
+      </details>
     </section>
 
     <!-- PRESUPUESTOS -->
@@ -677,6 +695,7 @@ function renderResumen() {
   $('#r-accounts').innerHTML = accHtml;
 
   renderReimb();
+  renderResumenCuotas(mes);
 
   // Alertas de presupuesto
   const spent = spentByCategory(mes); const alerts = [];
@@ -947,9 +966,10 @@ function renderCuotas() {
   if (!$('#q-paidon').value) $('#q-paidon').value = localDate();
   if (!S.cuotasOk) {
     warn.innerHTML = '<div class="panel" style="margin-bottom:1rem;border-color:var(--amber-bd);background:var(--amber-bg)">Falta correr el archivo <b>07_cuotas_resumenes.sql</b> en Supabase para usar esta pantalla.</div>';
-    sum.innerHTML = act.innerHTML = done.innerHTML = ''; doneBox.classList.add('hidden'); return;
+    sum.innerHTML = act.innerHTML = done.innerHTML = ''; doneBox.classList.add('hidden'); $('#q-pending').innerHTML = ''; $('#q-archive-box').classList.add('hidden'); return;
   }
   warn.innerHTML = '';
+  renderStatements();
   const stats = S.plans.map((p) => [p, planStats(p)]);
   const active = stats.filter(([, st]) => st.paid < st.n).sort((a, b) => ((a[1].next && a[1].next.occurred_on) || '9').localeCompare((b[1].next && b[1].next.occurred_on) || '9'));
   const fin = stats.filter(([, st]) => st.paid >= st.n);
@@ -963,6 +983,164 @@ function renderCuotas() {
   act.innerHTML = active.length ? active.map(([p]) => planHtml(p)).join('') : '<div class="empty"><i class="ti ti-credit-card"></i>No tenés cuotas en curso. Importá un resumen para cargarlas.</div>';
   doneBox.classList.toggle('hidden', !fin.length); done.innerHTML = fin.map(([p]) => planHtml(p)).join('');
 }
+/* ---------- resumenes: lectura del PDF, archivo y pago ---------- */
+const loadScriptOnce = (src, check) => new Promise((res, rej) => {
+  if (check()) return res();
+  const el = document.createElement('script'); el.src = src; el.onload = () => res();
+  el.onerror = () => rej(new Error(`No se pudo cargar ${src.split('?')[0]}. ¿Subiste la carpeta lib/ al repo?`));
+  document.head.appendChild(el);
+});
+async function loadPdfLibs() {
+  await loadScriptOnce('lib/statement.js?v=1', () => window.StatementParser);
+  await loadScriptOnce('lib/pdf.min.js?v=1', () => window.pdfjsLib);
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js?v=1';
+}
+async function pdfToRows(file) {
+  await loadPdfLibs();
+  let doc;
+  try { doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise; }
+  catch (e) { throw new Error(e && e.name === 'PasswordException' ? 'El PDF tiene contraseña. Abrilo y guardalo sin contraseña.' : 'No pude abrir ese PDF.'); }
+  const rows = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const tc = await (await doc.getPage(n)).getTextContent();
+    rows.push(...window.StatementParser.clusterRows(tc.items.map((i) => ({ x: i.transform[4], y: i.transform[5], s: i.str }))));
+  }
+  return rows;
+}
+const fmtDmy = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}` : '');
+const cardName = (id) => (S.cards.find((c) => c.id === id) || {}).name || 'Tarjeta';
+function guessCardId(brand) {
+  const rx = brand === 'Visa' ? /visa/ : brand === 'Amex' ? /amex|american/ : null; if (!rx) return '';
+  const c = S.cards.filter((x) => !x.archived).find((x) => rx.test(normS(x.name)) || rx.test(normS(x.network || '')));
+  return c ? c.id : '';
+}
+async function onStatementFile(file) {
+  const box = $('#q-preview'); S.stm = null;
+  if (!file) { box.innerHTML = ''; return; }
+  if (file.size > 10 * 1024 * 1024) throw new Error('El PDF pesa más de 10 MB');
+  box.innerHTML = '<p class="hint">Leyendo el resumen…</p>';
+  try {
+    const rows = await pdfToRows(file);
+    const r = window.StatementParser.parseStatementRows(rows);
+    S.stm = { file, r };
+    renderStatementPreview();
+  } catch (e) { box.innerHTML = ''; throw e; }
+}
+function renderStatementPreview() {
+  const box = $('#q-preview'); const st = S.stm; if (!st) { box.innerHTML = ''; return; }
+  const r = st.r; const cardId = st.cardId || guessCardId(r.brand); st.cardId = cardId;
+  const cards = S.cards.filter((c) => !c.archived);
+  const fatal = !r.due_on || r.total_ars == null;
+  const dup = cardId && S.stmts.find((x) => x.card_id === cardId && x.due_on === r.due_on);
+  box.innerHTML = `
+    ${r.warnings.length ? `<div class="warn-box"><b>Revisá antes de guardar:</b><br>${r.warnings.map(esc).join('<br>')}</div>` : '<div class="hint" style="color:var(--green);margin-bottom:.4rem">✓ Lectura verificada: las compras suman el subtotal del resumen.</div>'}
+    <div class="fg" style="margin-bottom:.5rem"><label for="q-pcard">Tarjeta</label><select id="q-pcard">${cards.map((c) => `<option value="${c.id}"${c.id === cardId ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+    <div class="month-row"><span>Emisor</span><b>${esc(r.brand || '?')}${r.last4 ? ' · …' + r.last4 : ''}</b></div>
+    <div class="month-row"><span>Cierre / vencimiento</span><b>${fmtDmy(r.closed_on)} · ${fmtDmy(r.due_on)}</b></div>
+    <div class="month-row"><span>Total en pesos</span><b style="font-family:'DM Mono',monospace">${r.total_ars == null ? '?' : fmtN(r.total_ars)}</b></div>
+    <div class="month-row"><span>Total en dólares</span><b style="font-family:'DM Mono',monospace">USD ${(r.total_usd || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</b></div>
+    <div class="month-row"><span>Pago mínimo</span><b style="font-family:'DM Mono',monospace">${r.min_ars == null ? '?' : fmtN(r.min_ars)}</b></div>
+    <div class="month-row"><span>Percepción RG 5617 (30%)</span><b style="font-family:'DM Mono',monospace">${fmtN(r.rg5617_ars)}</b></div>
+    <div class="month-row"><span>Cuotas encontradas</span><b>${r.cuotas.length ? r.cuotas.map((c) => `${esc(c.description)} ${c.from_no}/${c.installments} · ${fmtN(c.amount)}`).join('<br>') : 'ninguna'}</b></div>
+    ${dup ? `<div class="warn-box">${dup.paid_on ? 'Ese resumen ya está cargado y pagado: no se va a modificar.' : 'Ese resumen ya estaba cargado: se actualizan sus datos.'}</div>` : ''}
+    <div style="display:flex;gap:.5rem;margin-top:.7rem"><button class="btn btn-primary" id="btn-stm-save"${fatal || !cardId ? ' disabled' : ''}><i class="ti ti-device-floppy"></i>Guardar resumen</button>
+      <button class="btn btn-ghost" id="btn-stm-cancel">Cancelar</button></div>
+    ${fatal ? '<p class="hint" style="margin-top:.4rem">No pude leer el vencimiento o el total, así que no se puede guardar. Pasale el PDF a Claude.</p>' : !cardId ? '<p class="hint" style="margin-top:.4rem">Elegí la tarjeta de este resumen.</p>' : ''}`;
+}
+async function saveStatement() {
+  const st = S.stm; if (!st) return; const r = st.r; const card = $('#q-pcard').value;
+  if (!card) throw new Error('Elegí la tarjeta');
+  const saved = must(await sb.rpc('save_card_statement', { p_workspace: S.ws.id, p_card: card, p_due: r.due_on, p_closed_on: r.closed_on, p_total_ars: r.total_ars, p_total_usd: r.total_usd || 0, p_min_ars: r.min_ars, p_rg5617_ars: r.rg5617_ars || 0 }));
+  let msg = saved.already_paid ? 'Ese resumen ya estaba pagado (no se modificó).' : 'Resumen guardado.';
+  if (!saved.already_paid && r.cuotas.length) {
+    const plans = r.cuotas.map((c) => ({ description: c.description, installments: c.installments, from_no: c.from_no, first_due: r.due_on, amounts: Array(c.installments - c.from_no + 1).fill(c.amount) }));
+    const imp = must(await sb.rpc('import_card_cuotas', { p_workspace: S.ws.id, p_card: card, p_plans: plans }));
+    msg += ` Cuotas: ${imp.plans_created} plan(es) nuevo(s), ${imp.plans_duplicate} ya cargado(s).`;
+  }
+  // PDF al archivo privado (si falla, los datos ya quedaron guardados)
+  const path = `${S.ws.id}/${card}/${r.due_on}.pdf`;
+  try {
+    const up = await sb.storage.from('statements').upload(path, st.file, { contentType: 'application/pdf', upsert: false });
+    if (up.error && !/exist|duplicate/i.test(up.error.message || '')) throw up.error;
+    must(await sb.from('card_statements').update({ pdf_path: path }).eq('id', saved.id));
+  } catch (e) { msg += ` Pero no pude archivar el PDF (${e.message || e}).`; }
+  S.stm = null; $('#q-file').value = ''; $('#q-preview').innerHTML = '';
+  toast(msg); await loadData();
+}
+function stmRowTop(x) {
+  return `<div class="stm-head"><div><div class="plan-name">${esc(cardName(x.card_id))} · vence ${fmtDmy(x.due_on)}</div>
+    <div class="plan-meta">Cierre ${fmtDmy(x.closed_on) || '—'} · mínimo ${x.min_ars == null ? '—' : fmtN(x.min_ars)}</div></div>
+    <div class="plan-num"><b>${fmtN(x.total_ars)}</b> ARS${Number(x.total_usd) > 0 ? `<br>USD ${Number(x.total_usd).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : ''}</div></div>`;
+}
+const pdfBtn = (x) => (x.pdf_path ? `<button class="btn btn-ghost btn-xs" data-viewpdf="${esc(x.pdf_path)}"><i class="ti ti-file-text"></i>Ver PDF</button>` : '');
+function payOptions(x) {
+  const total = Number(x.total_ars), rg = Number(x.rg5617_ars) || 0, usd = Number(x.total_usd) || 0; const o = [];
+  o.push(['total', `Total del resumen · ${fmtN(total)}`, total]);
+  if (rg > 0 && usd > 0 && total - rg > 0) o.push(['sin5617', `Sin RG 5617 (USD con dólares) · ${fmtN(total - rg)}`, Math.round((total - rg) * 100) / 100]);
+  o.push(['otro', 'Otro monto', total]);
+  return o;
+}
+function renderStatements() {
+  const pend = S.stmts.filter((x) => !x.paid_on).sort((a, b) => a.due_on.localeCompare(b.due_on));
+  const paid = S.stmts.filter((x) => x.paid_on).sort((a, b) => b.due_on.localeCompare(a.due_on));
+  $('#q-pending').innerHTML = pend.length ? `<div class="metric-label" style="margin:.2rem 0 .4rem">Resúmenes para pagar</div>` + pend.map((x) => {
+    const opts = payOptions(x);
+    return `<div class="stm" data-stm="${x.id}">${stmRowTop(x)}
+      <div class="fg"><label>¿Cómo lo pagás?</label><select data-payopt="${x.id}">${opts.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join('')}</select></div>
+      ${opts.length > 2 ? `<p class="hint" style="margin:-.2rem 0 .5rem">«Sin RG 5617»: pagás en pesos el total menos la percepción de ${fmtN(x.rg5617_ars)} y los USD ${Number(x.total_usd).toLocaleString('es-AR', { minimumFractionDigits: 2 })} con dólares. Si el banco igual la cobra, aparece como saldo en el próximo resumen.</p>` : ''}
+      <div class="add-row" style="margin-bottom:.4rem"><div class="fg"><label>Monto en pesos</label><input type="number" inputmode="decimal" step="0.01" min="0" data-payamt="${x.id}" value="${opts[0][2]}" readonly></div>
+        <div class="fg"><label>Fecha de pago</label><input type="date" data-paydate="${x.id}" value="${localDate()}"></div></div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn btn-primary btn-sm" data-paygo="${x.id}"><i class="ti ti-check"></i>Registrar pago</button>${pdfBtn(x)}
+        <button class="btn btn-danger btn-xs" data-delstm="${x.id}" aria-label="Eliminar resumen"><i class="ti ti-trash"></i></button></div></div>`;
+  }).join('') : '';
+  const box = $('#q-archive-box'); box.classList.toggle('hidden', !paid.length);
+  const years = [...new Set(paid.map((x) => x.due_on.slice(0, 4)))];
+  $('#q-archive').innerHTML = years.map((y) => `<div class="metric-label" style="margin:.4rem 0">${y}</div>` + paid.filter((x) => x.due_on.startsWith(y)).map((x) => `
+    <div class="list-row"><div><div>${esc(cardName(x.card_id))} · vence ${fmtDmy(x.due_on)}</div>
+      <div class="sub">Pagado el ${fmtDmy(x.paid_on)} · ${fmtN(x.paid_ars)} ARS${x.paid_usd != null ? ` + USD ${Number(x.paid_usd).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : ''} · total ${fmtN(x.total_ars)}</div></div>${pdfBtn(x)}</div>`).join('')).join('');
+}
+async function openPdf(path) {
+  const w = window.open('', '_blank');
+  try {
+    const { data, error } = await sb.storage.from('statements').createSignedUrl(path, 120);
+    if (error) throw error;
+    if (w) w.location.href = data.signedUrl; else location.href = data.signedUrl;
+  } catch (e) { if (w) w.close(); throw e; }
+}
+async function payStatement(id) {
+  const x = S.stmts.find((y) => y.id === id); if (!x) return;
+  const optV = document.querySelector(`[data-payopt="${id}"]`).value; const amt = parseFloat(document.querySelector(`[data-payamt="${id}"]`).value);
+  const date = document.querySelector(`[data-paydate="${id}"]`).value;
+  if (!(amt >= 0)) throw new Error('Cargá el monto pagado'); if (!date) throw new Error('Falta la fecha de pago');
+  const usd = optV === 'sin5617' ? Number(x.total_usd) : null;
+  if (!confirm(`¿Registrar pago de $${fmtN(amt)}${usd ? ' + USD ' + usd : ''} del resumen de ${cardName(x.card_id)} (vence ${fmtDmy(x.due_on)})?`)) return;
+  const r = must(await sb.rpc('register_card_payment', { p_workspace: S.ws.id, p_card: x.card_id, p_due: x.due_on, p_paid_on: date, p_paid_ars: amt, p_paid_usd: usd }));
+  toast(r.message || 'Pago registrado'); await loadData();
+}
+async function deleteStatement(id) {
+  const x = S.stmts.find((y) => y.id === id); if (!x) return;
+  if (!confirm(`¿Eliminar el resumen de ${cardName(x.card_id)} que vence el ${fmtDmy(x.due_on)}? (Las cuotas cargadas no se borran.)`)) return;
+  must(await sb.from('card_statements').delete().eq('id', id));
+  if (x.pdf_path) await sb.storage.from('statements').remove([x.pdf_path]);
+  await loadData();
+}
+function renderResumenCuotas(mes) {
+  const box = $('#r-cuotas'); if (!box) return;
+  if (!S.cuotasOk) { box.innerHTML = ''; return; }
+  const active = S.plans.map((p) => [p, planStats(p)]).filter(([, st]) => st.paid < st.n).sort((a, b) => ((a[1].next && a[1].next.occurred_on) || '9').localeCompare((b[1].next && b[1].next.occurred_on) || '9'));
+  const delMes = S.txs.filter((t) => t.source === 'cuotas' && t.occurred_on.slice(0, 7) === mes);
+  if (!active.length && !delMes.length) { box.innerHTML = ''; return; }
+  const pagadas = delMes.filter((t) => t.status === 'confirmado').reduce((a, t) => a + t.amount, 0);
+  const porPagar = delMes.filter((t) => t.status === 'proyectado').reduce((a, t) => a + t.amount, 0);
+  box.innerHTML = `<div class="panel" style="margin-bottom:1rem"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.3rem">
+    <span class="metric-label" style="margin:0">Cuotas · ${esc(mLabel(mes))}</span>
+    <span class="hint" style="font-family:'DM Mono',monospace">pagadas ${fmtN(pagadas)} · por pagar ${fmtN(porPagar)}</span></div>
+    ${active.slice(0, 6).map(([p, st]) => { const pct = Math.round((st.paid / st.n) * 100); const card = S.cards.find((c) => c.id === p.card_id);
+      return `<div class="mini-plan"><div class="mini-top"><span>${esc(p.description)} <span class="hint">· ${esc(card ? card.name : '')}</span></span><b style="font-family:'DM Mono',monospace;white-space:nowrap">${st.paid} de ${st.n}</b></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div><div class="hint" style="margin-top:.2rem">Faltan ${st.n - st.paid} · quedan ${fmtN(st.remaining)} ARS</div></div>`; }).join('') || '<p class="hint">No tenés cuotas en curso.</p>'}
+    <button class="btn btn-ghost btn-xs" data-gotab="cuotas" style="margin-top:.5rem">Ver todas${active.length > 6 ? ` (${active.length})` : ''} →</button></div>`;
+}
+
 async function registerCardPayment() {
   const card = $('#q-card').value, due = $('#q-due').value, paid = $('#q-paidon').value, total = parseFloat($('#q-total').value);
   if (!card) throw new Error('Elegí la tarjeta');
@@ -1449,6 +1627,7 @@ function bindEvents() {
     await addRow('categories', { name, kind: $('#c-cat-kind').value }, S.cats); $('#c-cat-name').value = '';
     S.cats.sort((a, b) => a.name.localeCompare(b.name)); fillCatalogSelects(); renderConfig(); toast('Categoría creada ✓');
   }, e.currentTarget);
+  $('#q-file').onchange = (e) => guard(() => onStatementFile(e.target.files && e.target.files[0]));
   $('#btn-qpay').onclick = (e) => guard(registerCardPayment, e.currentTarget);
   $('#btn-qimport').onclick = (e) => guard(importCuotas, e.currentTarget);
   $('#btn-acc').onclick = (e) => guard(async () => {
@@ -1490,8 +1669,14 @@ function bindEvents() {
   $('#btn-json').onclick = () => download('misfinanzas-backup.json', JSON.stringify({ exportado: new Date().toISOString(), espacio: S.ws, categorias: S.cats, cuentas: S.accounts, tarjetas: S.cards, presupuestos: S.budgets, movimientos: S.txs, reintegros: S.reimb }, null, 2), 'application/json');
   // Delegación de eventos para botones generados dinámicamente
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-nologo],[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
+    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-nologo],[data-viewpdf],[data-paygo],[data-delstm],[data-gotab],#btn-stm-save,#btn-stm-cancel,[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
     if (t.id === 'btn-reimb') return guard(registerReimb, t);
+    if (t.id === 'btn-stm-save') return guard(saveStatement, t);
+    if (t.id === 'btn-stm-cancel') { S.stm = null; $('#q-file').value = ''; $('#q-preview').innerHTML = ''; return; }
+    if (t.dataset.viewpdf) return guard(() => openPdf(t.dataset.viewpdf));
+    if (t.dataset.paygo) return guard(() => payStatement(t.dataset.paygo), t);
+    if (t.dataset.delstm) return guard(() => deleteStatement(t.dataset.delstm));
+    if (t.dataset.gotab) { const b = $$('.tab-btn').find((x) => x.dataset.tab === t.dataset.gotab); if (b) b.click(); return; }
     if (t.dataset.nologo) return guard(() => setLogo(t.dataset.nologo, null));
     if (t.dataset.togtype) return guard(() => toggleType(t.dataset.togtype));
     if (t.dataset.undoreimb) return guard(() => undoReimb(t.dataset.undoreimb));
@@ -1501,6 +1686,10 @@ function bindEvents() {
     else if (t.dataset.switch) guard(() => switchWorkspace(t.dataset.switch));
   });
   document.addEventListener('change', (e) => {
+    const po = e.target.closest('[data-payopt]');
+    if (po) { const x = S.stmts.find((y) => y.id === po.dataset.payopt); const o = x && payOptions(x).find((z) => z[0] === po.value); const inp = document.querySelector(`[data-payamt="${po.dataset.payopt}"]`);
+      if (o && inp) { inp.value = o[2]; inp.readOnly = po.value !== 'otro'; if (po.value === 'otro') inp.focus(); } return; }
+    if (e.target.id === 'q-pcard' && S.stm) { S.stm.cardId = e.target.value; renderStatementPreview(); return; }
     const lf = e.target.closest('[data-logo]');
     if (lf) { const f = lf.files && lf.files[0]; lf.value = ''; if (f) guard(async () => setLogo(lf.dataset.logo, await logoFromFile(f))); return; }
     const c = e.target.closest('[data-reimbsel]'); if (!c) return;
