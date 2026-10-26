@@ -169,6 +169,16 @@ button.chip:active{opacity:.6}
 .budget-row{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.5rem}
 .bar-bg{height:5px;background:var(--surface3);border-radius:3px;overflow:hidden}
 .bar-fill{height:100%;border-radius:3px}
+.plan{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);padding:.8rem .95rem;margin-bottom:.6rem}
+.plan-top{display:flex;justify-content:space-between;gap:.6rem;align-items:flex-start;margin-bottom:.45rem}
+.plan-name{font-weight:600;font-size:14px;word-break:break-word}
+.plan-meta{font-size:11px;color:var(--text3)}
+.plan-num{font-family:'DM Mono',monospace;font-size:12px;white-space:nowrap;text-align:right}
+.plan .bar-bg{height:9px;border-radius:5px}.plan .bar-fill{border-radius:5px;background:var(--accent)}
+.plan.done .bar-fill{background:#1a6644}
+.plan-foot{display:flex;justify-content:space-between;gap:.5rem;font-size:11.5px;color:var(--text2);margin-top:.4rem;flex-wrap:wrap}
+.month-row{display:flex;justify-content:space-between;font-size:13px;padding:.3rem 0;border-bottom:0.5px solid var(--border)}
+.month-row:last-child{border-bottom:none}
 .bar-ok{background:#1a6644}.bar-warn{background:#b87a0a}.bar-over{background:#b83232}
 .list-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem .7rem;border:0.5px solid var(--border);border-radius:var(--r-sm);background:var(--surface);margin-bottom:.35rem}
 .list-row.arch{opacity:.55}
@@ -264,6 +274,7 @@ button.chip:active{opacity:.6}
       <button class="tab-btn active" data-tab="resumen"><i class="ti ti-layout-dashboard"></i>Resumen</button>
       <button class="tab-btn" data-tab="cargar"><i class="ti ti-circle-plus"></i>Cargar</button>
       <button class="tab-btn" data-tab="movs"><i class="ti ti-list-details"></i>Movimientos</button>
+      <button class="tab-btn" data-tab="cuotas"><i class="ti ti-credit-card"></i>Cuotas</button>
       <button class="tab-btn" data-tab="presu"><i class="ti ti-target"></i>Presupuestos</button>
       <button class="tab-btn" data-tab="config"><i class="ti ti-adjustments-horizontal"></i>Config</button>
     </nav>
@@ -348,6 +359,35 @@ button.chip:active{opacity:.6}
       <div class="panel" style="padding:0" id="m-list"></div>
       <p class="hint" style="margin-top:.5rem" id="m-count"></p>
       <p class="hint" style="margin-top:.25rem">Tip: tocá «fijo» o «variable» en un gasto para cambiarlo. La app lo recuerda para ese concepto.</p>
+    </section>
+
+    <!-- CUOTAS -->
+    <section id="tab-cuotas" class="tab">
+      <div class="page-head"><span class="page-title">Cuotas</span><span class="hint">Tarjetas de crédito · en pesos</span></div>
+      <div id="q-warn"></div>
+      <div id="q-summary"></div>
+      <div id="q-active"></div>
+      <details id="q-done-box" class="hidden" style="margin-bottom:1rem"><summary class="hint" style="cursor:pointer;margin-bottom:.5rem">Planes terminados</summary><div id="q-done"></div></details>
+
+      <div class="panel" style="margin-bottom:1rem">
+        <div class="page-title" style="font-size:14px;margin-bottom:.5rem">Registrar pago de un resumen</div>
+        <p class="hint" style="margin-bottom:.6rem">Las cuotas de ese vencimiento pasan a pagadas y cuentan como gasto en la fecha de pago.</p>
+        <div class="add-row">
+          <div class="fg"><label for="q-card">Tarjeta</label><select id="q-card"></select></div>
+          <div class="fg"><label for="q-due">Vencimiento del resumen</label><input type="date" id="q-due"></div>
+          <div class="fg"><label for="q-paidon">Fecha de pago</label><input type="date" id="q-paidon"></div>
+          <div class="fg"><label for="q-total">Total pagado (ARS)</label><input type="number" id="q-total" inputmode="decimal" min="0" step="0.01" placeholder="0"></div>
+          <button class="btn btn-primary" id="btn-qpay"><i class="ti ti-check"></i>Registrar pago</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="page-title" style="font-size:14px;margin-bottom:.5rem">Importar cuotas de un resumen</div>
+        <p class="hint" style="margin-bottom:.6rem">Pasale el resumen en PDF a Claude: te devuelve un texto para pegar acá. Si el plan ya estaba cargado, no se duplica.</p>
+        <div class="fg" style="margin-bottom:.6rem"><label for="q-icard">Tarjeta del resumen</label><select id="q-icard"></select></div>
+        <div class="fg" style="margin-bottom:.6rem"><label for="q-json">Texto a pegar</label><textarea id="q-json" rows="6" style="width:100%;font-family:'DM Mono',monospace;font-size:12px" placeholder='[{"description":"…","installments":3,…}]'></textarea></div>
+        <button class="btn btn-primary" id="btn-qimport"><i class="ti ti-file-import"></i>Importar</button>
+      </div>
     </section>
 
     <!-- PRESUPUESTOS -->
@@ -475,7 +515,7 @@ const PALETTE = ['#2a4494', '#1a6644', '#b83232', '#8a5a0a', '#6b3ea0', '#1878aa
 
 const S = {
   user: null, workspaces: [], ws: null,
-  cats: [], accounts: [], cards: [], budgets: [], txs: [], reimb: [], reimbOff: new Set(),
+  cats: [], accounts: [], cards: [], budgets: [], txs: [], reimb: [], reimbOff: new Set(), plans: [], stmts: [], cuotasOk: true,
   tipo: 'gasto', fxCache: {}, booted: false, subTouched: false
 };
 let sb = null;
@@ -538,6 +578,14 @@ async function loadData() {
     S.cats = cats; S.accounts = accounts.map((a) => ({ ...a, opening_balance: Number(a.opening_balance) }));
     S.cards = cards; S.budgets = budgets.map((b) => ({ ...b, amount: Number(b.amount) }));
     S.txs = txs.map(normTx); S.reimb = reimb.map((r) => ({ ...r, amount: Number(r.amount) })); S.reimbOff = new Set();
+    // Cuotas: si todavia no corriste el SQL 07, el resto de la app sigue andando
+    try {
+      const [plans, stmts] = await Promise.all([
+        fetchAll(() => sb.from('installment_plans').select('*').eq('workspace_id', ws).order('created_at').order('id')),
+        fetchAll(() => sb.from('card_statements').select('*').eq('workspace_id', ws).order('due_on').order('id'))
+      ]);
+      S.plans = plans.map((x) => ({ ...x, total_amount: Number(x.total_amount) })); S.stmts = stmts; S.cuotasOk = true;
+    } catch (e2) { console.warn('Cuotas no disponibles (¿falta el SQL 07?)', e2); S.plans = []; S.stmts = []; S.cuotasOk = false; }
     setSync('ok', 'Sincronizado');
   } catch (e) {
     setSync('err', 'Sin conexión'); throw e;
@@ -546,7 +594,7 @@ async function loadData() {
 }
 
 function renderAll() {
-  fillMonthSelects(); fillCatalogSelects(); renderResumen(); renderMovs(); renderBudgets(); renderConfig();
+  fillMonthSelects(); fillCatalogSelects(); renderResumen(); renderMovs(); renderBudgets(); renderCuotas(); renderConfig();
 }
 
 /* ---------- meses ---------- */
@@ -869,6 +917,76 @@ function exportCsv() {
 /* =====================================================================
    PRESUPUESTOS
    ===================================================================== */
+/* ---------- cuotas ---------- */
+const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const ymLabel = (ym) => `${MES_CORTO[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`;
+function planStats(p) {
+  const rows = S.txs.filter((t) => t.installment_plan_id === p.id).sort((a, b) => a.installment_no - b.installment_no);
+  const paid = (p.paid_before || 0) + rows.filter((t) => t.status === 'confirmado').length;
+  const pending = rows.filter((t) => t.status === 'proyectado');
+  const remaining = pending.reduce((a, t) => a + t.amount, 0);
+  const next = pending[0] || null; const last = pending.length ? pending[pending.length - 1] : rows[rows.length - 1];
+  const overdue = pending.filter((t) => t.occurred_on.slice(0, 7) < curMonth());
+  return { rows, paid, pending, remaining, next, last, overdue, n: p.installments };
+}
+function planHtml(p) {
+  const st = planStats(p); const pct = Math.round((st.paid / st.n) * 100); const card = S.cards.find((c) => c.id === p.card_id);
+  const done = st.paid >= st.n; const each = st.next ? st.next.amount : st.rows.length ? st.rows[st.rows.length - 1].amount : 0;
+  return `<div class="plan ${done ? 'done' : ''}">
+    <div class="plan-top"><div><div class="plan-name">${esc(p.description)}</div><div class="plan-meta">${esc(card ? card.name : 'Sin tarjeta')}${each ? ' · cuota de ' + fmtN(each) : ''}</div></div>
+      <div class="plan-num"><b>${st.paid}</b> de ${st.n}<br><span class="hint">${pct}%</span></div></div>
+    <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+    <div class="plan-foot"><span>${done ? '✓ Plan completo' : `Faltan <b>${st.n - st.paid}</b> · quedan ${fmtN(st.remaining)} ARS`}</span>
+      <span>${done ? '' : st.last ? 'Última: ' + ymLabel(st.last.occurred_on.slice(0, 7)) : ''}</span></div>
+    ${st.overdue.length ? `<div class="plan-foot" style="color:var(--amber)"><span>⚠ ${st.overdue.length} cuota(s) de meses anteriores sin pago registrado</span></div>` : ''}</div>`;
+}
+function renderCuotas() {
+  const warn = $('#q-warn'), sum = $('#q-summary'), act = $('#q-active'), doneBox = $('#q-done-box'), done = $('#q-done');
+  const cardOpts = S.cards.filter((c) => !c.archived).map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('') || '<option value="">Creá una tarjeta en Config</option>';
+  ['#q-card', '#q-icard'].forEach((id) => { const el = $(id), prev = el.value; el.innerHTML = cardOpts; if (prev) el.value = prev; });
+  if (!$('#q-paidon').value) $('#q-paidon').value = localDate();
+  if (!S.cuotasOk) {
+    warn.innerHTML = '<div class="panel" style="margin-bottom:1rem;border-color:var(--amber-bd);background:var(--amber-bg)">Falta correr el archivo <b>07_cuotas_resumenes.sql</b> en Supabase para usar esta pantalla.</div>';
+    sum.innerHTML = act.innerHTML = done.innerHTML = ''; doneBox.classList.add('hidden'); return;
+  }
+  warn.innerHTML = '';
+  const stats = S.plans.map((p) => [p, planStats(p)]);
+  const active = stats.filter(([, st]) => st.paid < st.n).sort((a, b) => ((a[1].next && a[1].next.occurred_on) || '9').localeCompare((b[1].next && b[1].next.occurred_on) || '9'));
+  const fin = stats.filter(([, st]) => st.paid >= st.n);
+  // compromiso por mes (cuotas proyectadas de todos los planes)
+  const byMonth = {};
+  S.txs.filter((t) => t.status === 'proyectado' && t.source === 'cuotas').forEach((t) => { const m = t.occurred_on.slice(0, 7); byMonth[m] = (byMonth[m] || 0) + t.amount; });
+  const months = Object.keys(byMonth).sort();
+  sum.innerHTML = months.length ? `<div class="panel" style="margin-bottom:1rem"><div class="metric-label">Cuotas que vienen</div>
+    ${months.slice(0, 8).map((m) => `<div class="month-row"><span>${ymLabel(m)}</span><b style="font-family:'DM Mono',monospace">${fmtN(byMonth[m])}</b></div>`).join('')}
+    <div class="month-row"><span class="hint">Total pendiente</span><b style="font-family:'DM Mono',monospace">${fmtN(months.reduce((a, m) => a + byMonth[m], 0))}</b></div></div>` : '';
+  act.innerHTML = active.length ? active.map(([p]) => planHtml(p)).join('') : '<div class="empty"><i class="ti ti-credit-card"></i>No tenés cuotas en curso. Importá un resumen para cargarlas.</div>';
+  doneBox.classList.toggle('hidden', !fin.length); done.innerHTML = fin.map(([p]) => planHtml(p)).join('');
+}
+async function registerCardPayment() {
+  const card = $('#q-card').value, due = $('#q-due').value, paid = $('#q-paidon').value, total = parseFloat($('#q-total').value);
+  if (!card) throw new Error('Elegí la tarjeta');
+  if (!due) throw new Error('Falta el vencimiento del resumen');
+  if (!paid) throw new Error('Falta la fecha de pago');
+  if (!(total >= 0)) throw new Error('Cargá el total pagado');
+  if (!confirm(`¿Registrar el pago de $${fmtN(total)} del resumen que vence el ${due}?`)) return;
+  const r = must(await sb.rpc('register_card_payment', { p_workspace: S.ws.id, p_card: card, p_due: due, p_paid_on: paid, p_total_ars: total }));
+  toast(r.message || 'Pago registrado', r.duplicate ? '' : 'ok');
+  $('#q-total').value = ''; $('#q-due').value = '';
+  await loadData();
+}
+async function importCuotas() {
+  const card = $('#q-icard').value; const raw = $('#q-json').value.trim();
+  if (!card) throw new Error('Elegí la tarjeta del resumen');
+  if (!raw) throw new Error('Pegá el texto que te dio Claude');
+  let plans; try { plans = JSON.parse(raw); } catch { throw new Error('El texto pegado no es válido (está incompleto o cortado)'); }
+  if (!Array.isArray(plans)) plans = [plans];
+  const r = must(await sb.rpc('import_card_cuotas', { p_workspace: S.ws.id, p_card: card, p_plans: plans }));
+  toast(`Planes nuevos: ${r.plans_created} · ya cargados: ${r.plans_duplicate} · cuotas: ${r.cuotas_created}`, 'ok');
+  $('#q-json').value = '';
+  await loadData();
+}
+
 function renderBudgets() {
   const spent = spentByCategory(curMonth()); const box = $('#b-list');
   if (!S.budgets.length) { box.innerHTML = '<div class="empty"><i class="ti ti-target"></i>Todavía no definiste presupuestos</div>'; return; }
@@ -1331,6 +1449,8 @@ function bindEvents() {
     await addRow('categories', { name, kind: $('#c-cat-kind').value }, S.cats); $('#c-cat-name').value = '';
     S.cats.sort((a, b) => a.name.localeCompare(b.name)); fillCatalogSelects(); renderConfig(); toast('Categoría creada ✓');
   }, e.currentTarget);
+  $('#btn-qpay').onclick = (e) => guard(registerCardPayment, e.currentTarget);
+  $('#btn-qimport').onclick = (e) => guard(importCuotas, e.currentTarget);
   $('#btn-acc').onclick = (e) => guard(async () => {
     const name = $('#c-acc-name').value.trim(); if (!name) return;
     const saved = await addRow('accounts', { name, kind: $('#c-acc-kind').value, currency: $('#c-acc-cur').value, opening_balance: parseFloat($('#c-acc-open').value) || 0 }, S.accounts);
