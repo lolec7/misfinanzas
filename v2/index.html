@@ -952,7 +952,7 @@ function planHtml(p) {
   const st = planStats(p); const pct = Math.round((st.paid / st.n) * 100); const card = S.cards.find((c) => c.id === p.card_id);
   const done = st.paid >= st.n; const each = st.next ? st.next.amount : st.rows.length ? st.rows[st.rows.length - 1].amount : 0;
   return `<div class="plan ${done ? 'done' : ''}">
-    <div class="plan-top"><div><div class="plan-name">${esc(p.description)}</div><div class="plan-meta">${esc(card ? card.name : 'Sin tarjeta')}${each ? ' · cuota de ' + fmtN(each) : ''}</div></div>
+    <div class="plan-top"><div><div class="plan-name">${esc(p.description)} <button class="btn btn-ghost btn-xs" data-renplan="${p.id}" aria-label="Cambiar nombre" style="padding:1px 6px;margin-left:4px"><i class="ti ti-pencil"></i></button></div><div class="plan-meta">${esc(card ? card.name : 'Sin tarjeta')}${each ? ' · cuota de ' + fmtN(each) : ''}</div></div>
       <div class="plan-num"><b>${st.paid}</b> de ${st.n}<br><span class="hint">${pct}%</span></div></div>
     <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
     <div class="plan-foot"><span>${done ? '✓ Plan completo' : `Faltan <b>${st.n - st.paid}</b> · quedan ${fmtN(st.remaining)} ARS`}</span>
@@ -1141,6 +1141,16 @@ function renderResumenCuotas(mes) {
     <button class="btn btn-ghost btn-xs" data-gotab="cuotas" style="margin-top:.5rem">Ver todas${active.length > 6 ? ` (${active.length})` : ''} →</button></div>`;
 }
 
+async function renamePlan(id) {
+  const p = S.plans.find((x) => x.id === id); if (!p) return;
+  const name = (prompt('Nombre del plan de cuotas', p.description) || '').trim().slice(0, 120);
+  if (!name || name === p.description) return;
+  const rows = S.txs.filter((t) => t.installment_plan_id === id);
+  // primero las cuotas, al final el plan: si algo falla, el plan conserva el nombre viejo y se ve el error
+  await Promise.all(rows.map(async (t) => must(await sb.from('transactions').update({ description: `${name} (${t.installment_no}/${p.installments})` }).eq('id', t.id))));
+  must(await sb.from('installment_plans').update({ description: name }).eq('id', id));
+  toast('Nombre cambiado ✓'); await loadData();
+}
 async function registerCardPayment() {
   const card = $('#q-card').value, due = $('#q-due').value, paid = $('#q-paidon').value, total = parseFloat($('#q-total').value);
   if (!card) throw new Error('Elegí la tarjeta');
@@ -1669,10 +1679,11 @@ function bindEvents() {
   $('#btn-json').onclick = () => download('misfinanzas-backup.json', JSON.stringify({ exportado: new Date().toISOString(), espacio: S.ws, categorias: S.cats, cuentas: S.accounts, tarjetas: S.cards, presupuestos: S.budgets, movimientos: S.txs, reintegros: S.reimb }, null, 2), 'application/json');
   // Delegación de eventos para botones generados dinámicamente
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-nologo],[data-viewpdf],[data-paygo],[data-delstm],[data-gotab],#btn-stm-save,#btn-stm-cancel,[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
+    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-nologo],[data-viewpdf],[data-renplan],[data-paygo],[data-delstm],[data-gotab],#btn-stm-save,#btn-stm-cancel,[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
     if (t.id === 'btn-reimb') return guard(registerReimb, t);
     if (t.id === 'btn-stm-save') return guard(saveStatement, t);
     if (t.id === 'btn-stm-cancel') { S.stm = null; $('#q-file').value = ''; $('#q-preview').innerHTML = ''; return; }
+    if (t.dataset.renplan) return guard(() => renamePlan(t.dataset.renplan));
     if (t.dataset.viewpdf) return guard(() => openPdf(t.dataset.viewpdf));
     if (t.dataset.paygo) return guard(() => payStatement(t.dataset.paygo), t);
     if (t.dataset.delstm) return guard(() => deleteStatement(t.dataset.delstm));
