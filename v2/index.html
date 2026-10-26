@@ -952,7 +952,8 @@ function planHtml(p) {
   const st = planStats(p); const pct = Math.round((st.paid / st.n) * 100); const card = S.cards.find((c) => c.id === p.card_id);
   const done = st.paid >= st.n; const each = st.next ? st.next.amount : st.rows.length ? st.rows[st.rows.length - 1].amount : 0;
   return `<div class="plan ${done ? 'done' : ''}">
-    <div class="plan-top"><div><div class="plan-name">${esc(p.description)} <button class="btn btn-ghost btn-xs" data-renplan="${p.id}" aria-label="Cambiar nombre" style="padding:1px 6px;margin-left:4px"><i class="ti ti-pencil"></i></button></div><div class="plan-meta">${esc(card ? card.name : 'Sin tarjeta')}${each ? ' · cuota de ' + fmtN(each) : ''}</div></div>
+    <div class="plan-top"><div><div class="plan-name">${esc(p.description)} <button class="btn btn-ghost btn-xs" data-renplan="${p.id}" aria-label="Cambiar nombre" style="padding:1px 6px;margin-left:4px"><i class="ti ti-pencil"></i></button></div><div class="plan-meta">${esc(card ? card.name : 'Sin tarjeta')}${each ? ' · cuota de ' + fmtN(each) : ''}</div>
+      ${p.bank_name && p.bank_name !== p.description ? `<div class="plan-meta" style="font-size:10.5px">En el resumen: ${esc(p.bank_name)}</div>` : ''}</div>
       <div class="plan-num"><b>${st.paid}</b> de ${st.n}<br><span class="hint">${pct}%</span></div></div>
     <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
     <div class="plan-foot"><span>${done ? '✓ Plan completo' : `Faltan <b>${st.n - st.paid}</b> · quedan ${fmtN(st.remaining)} ARS`}</span>
