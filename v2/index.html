@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#2a4494">
+<meta name="theme-color" content="#1f58c9">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -19,15 +19,17 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#f4f3f0;--surface:#fff;--surface2:#f9f8f6;--surface3:#f0efe9;
-  --border:#e8e6e0;--border2:#d4d1c8;--text:#181714;--text2:#6a6860;--text3:#a09e96;
+  --bg:#eef2f9;--surface:#fff;--surface2:#f6f8fc;--surface3:#eceff6;
+  --border:#e3e8f1;--border2:#d0d7e4;--text:#14182a;--text2:#5d6578;--text3:#97a0b3;
   --green:#1a6644;--green-bg:#eaf5f0;--green-bd:#c2e4d4;
   --red:#b83232;--red-bg:#fdf1f1;--red-bd:#f0c8c8;
   --blue:#1e4fa0;--blue-bg:#eef3fc;
   --amber:#8a5a0a;--amber-bg:#fdf5e8;--amber-bd:#f0d9a8;
-  --accent:#2a4494;--accent-light:#e4eaf8;
-  --r:12px;--r-sm:8px;--pill:999px;
+  --accent:#1f58c9;--accent-light:#e6eefc;
+  --r:16px;--r-sm:10px;--pill:999px;
   --nav-h:64px;
+  --navy:#0d2552;--navy2:#08183a;
+  --shadow:0 1px 2px rgba(16,40,90,.05),0 8px 24px rgba(16,40,90,.06);
 }
 html{-webkit-text-size-adjust:100%}
 body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;font-size:14px;line-height:1.5;min-height:100vh}
@@ -200,8 +202,90 @@ button.chip:active{opacity:.6}
 .spinner{width:18px;height:18px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* ---------- Rediseño: tarjetas, KPIs, secciones ---------- */
+body{background:linear-gradient(180deg,#f3f6fc 0,#e9eff8 100%) fixed}
+.panel,.metric,.chart-card,.budget,.plan,.stm,.sy-row,.card-center{box-shadow:var(--shadow);border-color:rgba(16,40,90,.06)}
+.page-sub{font-size:13px;color:var(--text2);margin-top:2px}
+.page-head .page-title{font-size:22px}
+.metrics{grid-template-columns:repeat(4,1fr);gap:12px}
+.metric{display:flex;align-items:center;gap:.8rem;padding:1rem 1.05rem}
+.metric::before{border-radius:var(--r) var(--r) 0 0}
+.metric.m-blue::before{background:#1f58c9}.metric.m-red::before{background:#e03e3e}.metric.m-green::before{background:#16a36b}.metric.m-gray::before{background:#8b78d8}
+.metric-ico{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:21px;flex:none}
+.m-blue .metric-ico{background:#2a6df4}.m-red .metric-ico{background:#e5484d}.m-green .metric-ico{background:#16a36b}.m-gray .metric-ico{background:#e9e4fa;color:#5a45b8}
+.metric-body{min-width:0}
+.metric-label{font-size:13px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0;margin:0}
+.metric-val{font-size:22px;color:var(--text)!important;white-space:nowrap}
+.metric-var{font-size:11.5px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:3px}
+.metric-var .sh{display:none}
+.metric-var.good{color:var(--green)}.metric-var.bad{color:var(--red)}
+.sect-head{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.8rem}
+.sect-title{display:flex;align-items:center;gap:.6rem;font-size:15px;font-weight:600;letter-spacing:-.2px}
+.sect-ico{width:32px;height:32px;border-radius:10px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+.link-btn{background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:.2rem 0}
+.sect{margin-bottom:1rem}
+.accounts{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:0}
+.acc-card{border:1px solid var(--border);border-radius:14px;padding:.8rem .9rem;background:var(--surface)}
+.acc-top{display:flex;align-items:center;gap:.55rem;margin-bottom:.45rem}
+.acc-top .acc-ico{margin-bottom:0;width:30px;height:30px;flex:none}
+.acc-name{font-size:13px;font-weight:500;color:var(--text2);text-transform:none;letter-spacing:0;min-width:0;overflow-wrap:anywhere}
+.acc-bal{font-size:18px}.nw{white-space:nowrap}
+.mini-plan .bar-bg{height:10px;border-radius:6px}.mini-plan .bar-fill{border-radius:6px;background:linear-gradient(90deg,#1f58c9,#3b7bf2)}
+.mini-top{font-size:13.5px}.mini-top>span:first-child{font-weight:600}
+.charts{grid-template-columns:.9fr 1.1fr;gap:12px}
+.chart-card{padding:1.1rem 1.2rem}
+.chart-card .sect-head{margin-bottom:.6rem}
+.donut-wrap{display:flex;align-items:center;gap:1.1rem;flex-wrap:wrap}
+.donut-cv{position:relative;width:168px;height:168px;flex:none;margin:0 auto}
+.donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center}
+.donut-center b{font-size:18px;font-family:'DM Mono',monospace;letter-spacing:-.4px}
+.donut-center span{font-size:11px;color:var(--text3)}
+.legend2{flex:1;min-width:140px;display:flex;flex-direction:column;gap:.5rem}
+.lg-row{display:flex;align-items:center;gap:.5rem;font-size:13px}
+.lg-row i{width:10px;height:10px;border-radius:50%;flex:none}
+.lg-row .lg-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lg-row b{font-family:'DM Mono',monospace;font-weight:500;font-size:12.5px}
+.side-brand,.side-sep,.side-foot,.side-only{display:none}
+.tab-btn .x{display:none}
+#cfg-accounts{scroll-margin-top:80px}
+
+/* ---------- Escritorio: barra lateral ---------- */
+@media(min-width:900px){
+  body{padding-left:232px}
+  header{background:transparent;border-bottom:none;position:static;padding-top:0}
+  .hdr{max-width:1180px;padding:1.1rem 1.6rem .2rem}
+  .brand{display:none}
+  .ws-wrap{background:var(--surface);border-radius:14px;box-shadow:var(--shadow);padding:.2rem .7rem}
+  .ws-wrap select{border:none;background:transparent;font-weight:600;font-size:14px;padding:.45rem .2rem;max-width:200px}
+  .ws-wrap select:focus{outline:none}
+  .sync{font-size:13px}
+  #btn-refresh{width:42px;height:42px;border-radius:50%;background:var(--surface);box-shadow:var(--shadow);border-color:transparent;color:var(--accent);font-size:18px}
+  main{max-width:1180px;padding:1rem 1.6rem 2.5rem}
+  .page-head .page-title{font-size:30px;letter-spacing:-.8px}
+  #r-mes{background:var(--surface);border-color:transparent;box-shadow:var(--shadow);border-radius:14px;padding:.65rem 1rem;font-weight:600;font-size:14px}
+  #tabs{position:fixed;top:0;left:0;bottom:0;width:232px;flex-direction:column;gap:3px;padding:0 14px 18px;max-width:none;margin:0;overflow-y:auto;background:linear-gradient(180deg,var(--navy) 0,var(--navy2) 100%);z-index:55}
+  .side-brand{display:flex;align-items:center;gap:.6rem;color:#fff;font-size:20px;font-weight:700;letter-spacing:-.4px;padding:1.5rem .5rem 1.3rem}
+  .side-brand i{font-size:30px;color:#4f8cff}
+  .tab-btn{width:100%;padding:11px 14px;border-radius:12px;font-size:14px;font-weight:500;color:#c4d2f1;background:transparent;border:none;gap:12px;text-align:left}
+  .tab-btn i{font-size:21px}
+  .tab-btn:hover{background:rgba(255,255,255,.07);color:#fff;border:none}
+  .tab-btn.active{background:linear-gradient(90deg,#1f58c9,#2f6fe6);color:#fff;border:none;font-weight:600}
+  .tab-btn .x{display:inline}
+  .side-only{display:flex}
+  .side-sep{display:block;height:1px;background:rgba(255,255,255,.1);margin:.7rem .5rem}
+  .side-foot{display:flex;flex-direction:column;gap:.8rem;margin-top:auto;padding:1.5rem .6rem .2rem;color:#dbe6ff;font-style:italic;font-size:15px;line-height:1.35}
+  .side-foot i{font-size:52px;color:#4f8cff;font-style:normal}
+}
+
+@media(max-width:1100px){.metrics{grid-template-columns:1fr 1fr}.charts{grid-template-columns:1fr}}
 /* ---------- Celular: barra de pestañas abajo ---------- */
 @media(max-width:700px){
+  .metric{gap:.6rem;padding:.8rem .8rem}.metric-ico{width:34px;height:34px;font-size:18px}.metric-val{font-size:17px}
+  .page-sub{display:none}
+  .metric-var .lg{display:none}.metric-var .sh{display:inline}
+  .acc-bal{font-size:16px}
+  .metrics{grid-template-columns:1fr 1fr}
+  .charts{grid-template-columns:1fr}
   body{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom))}
   #tabs{position:fixed;bottom:0;left:0;right:0;z-index:60;background:var(--surface);border-top:1px solid var(--border);padding:6px 6px calc(6px + env(safe-area-inset-bottom));gap:2px;max-width:none;justify-content:space-around;overflow:visible}
   .tab-btn{flex:1;flex-direction:column;gap:2px;padding:6px 2px;font-size:10.5px;background:transparent;border-color:transparent;color:var(--text2)}
@@ -278,12 +362,16 @@ button.chip:active{opacity:.6}
       <button class="btn btn-ghost btn-sm" id="btn-refresh" aria-label="Actualizar"><i class="ti ti-refresh"></i></button>
     </div>
     <nav id="tabs" aria-label="Secciones">
+      <div class="side-brand"><i class="ti ti-chart-bar"></i><span>MisFinanzas</span></div>
       <button class="tab-btn active" data-tab="resumen"><i class="ti ti-layout-dashboard"></i>Resumen</button>
-      <button class="tab-btn" data-tab="cargar"><i class="ti ti-circle-plus"></i>Cargar</button>
+      <button class="tab-btn" data-tab="cargar"><i class="ti ti-circle-plus"></i><span>Cargar<span class="x"> Movimientos</span></span></button>
       <button class="tab-btn" data-tab="movs"><i class="ti ti-list-details"></i>Movimientos</button>
       <button class="tab-btn" data-tab="cuotas"><i class="ti ti-credit-card"></i>Cuotas</button>
       <button class="tab-btn" data-tab="presu"><i class="ti ti-target"></i>Presupuestos</button>
-      <button class="tab-btn" data-tab="config"><i class="ti ti-adjustments-horizontal"></i>Config</button>
+      <button class="tab-btn" data-tab="config"><i class="ti ti-adjustments-horizontal"></i><span>Config<span class="x">uración</span></span></button>
+      <div class="side-sep"></div>
+      <button class="tab-btn side-only" data-tab="config" data-scroll="accounts"><i class="ti ti-building-bank"></i>Cuentas y Saldos</button>
+      <div class="side-foot"><i class="ti ti-wallet"></i><span>Organizá hoy,<br>tranquilizate mañana.</span></div>
     </nav>
   </header>
 
@@ -291,21 +379,25 @@ button.chip:active{opacity:.6}
     <!-- RESUMEN -->
     <section id="tab-resumen" class="tab active">
       <div class="page-head">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="page-title">Resumen</span><span id="r-pill" class="pill-bal pos"></span></div>
+        <div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="page-title">Resumen</span><span id="r-pill" class="pill-bal pos"></span></div>
+          <div class="page-sub">Tu situación financiera, en un vistazo</div></div>
         <select id="r-mes" class="select-sm" aria-label="Mes"></select>
       </div>
       <div id="r-alerts"></div>
       <div class="metrics" id="r-metrics"></div>
       <div id="r-reimb"></div>
-      <div class="accounts" id="r-accounts"></div>
+      <div class="panel sect"><div class="sect-head"><div class="sect-title"><span class="sect-ico"><i class="ti ti-building-bank"></i></span>Tus cuentas y saldos</div>
+        <button class="link-btn" type="button" data-gotab="config" data-scroll="accounts">Ver todas →</button></div>
+        <div class="accounts" id="r-accounts"></div></div>
       <div id="r-cuotas"></div>
       <div class="charts">
-        <div class="chart-card"><div class="chart-label">Gastos por categoría</div><div class="legend" id="r-legend"></div>
-          <div style="position:relative;height:190px"><canvas id="ch-cat" role="img" aria-label="Gastos por categoría del mes"></canvas></div></div>
-        <div class="chart-card"><div class="chart-label">Ingresos vs gastos</div>
-          <div style="position:relative;height:210px"><canvas id="ch-bar" role="img" aria-label="Ingresos y gastos de los últimos meses"></canvas></div></div>
-        <div class="chart-card full"><div class="chart-label">Balance mensual</div>
-          <div style="position:relative;height:160px"><canvas id="ch-line" role="img" aria-label="Evolución del balance mensual"></canvas></div></div>
+        <div class="chart-card"><div class="sect-head"><div class="sect-title"><span class="sect-ico"><i class="ti ti-chart-pie"></i></span>Gastos por categoría</div></div>
+          <div class="donut-wrap"><div class="donut-cv"><canvas id="ch-cat" role="img" aria-label="Gastos por categoría del mes"></canvas><div class="donut-center" id="r-donut"></div></div>
+            <div class="legend2" id="r-legend"></div></div></div>
+        <div class="chart-card"><div class="sect-head"><div class="sect-title"><span class="sect-ico"><i class="ti ti-chart-bar"></i></span>Ingresos vs gastos</div></div>
+          <div style="position:relative;height:200px"><canvas id="ch-bar" role="img" aria-label="Ingresos y gastos de los últimos meses"></canvas></div></div>
+        <div class="chart-card full"><div class="sect-head"><div class="sect-title"><span class="sect-ico"><i class="ti ti-trending-up"></i></span>Balance mensual</div></div>
+          <div style="position:relative;height:170px"><canvas id="ch-line" role="img" aria-label="Evolución del balance mensual"></canvas></div></div>
       </div>
     </section>
 
@@ -444,7 +536,7 @@ button.chip:active{opacity:.6}
           <div id="c-cats"></div>
         </div>
         <div>
-          <div class="section-label">Cuentas</div>
+          <div class="section-label" id="cfg-accounts">Cuentas</div>
           <div class="add-row">
             <div class="fg"><label for="c-acc-name">Nombre</label><input id="c-acc-name" maxlength="40" placeholder="Ej: Santander"></div>
             <div class="fg"><label for="c-acc-kind">Tipo</label><select id="c-acc-kind"><option value="banco">Banco</option><option value="billetera">Billetera</option><option value="efectivo">Efectivo</option><option value="inversion">Inversión</option><option value="otra">Otra</option></select></div>
@@ -529,7 +621,7 @@ const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('es-AR');
 const fmtD = (n) => (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const mLabel = (ym) => { const [y, m] = ym.split('-'); return `${MESES[+m - 1]} ${y}`; };
-const PALETTE = ['#2a4494', '#1a6644', '#b83232', '#8a5a0a', '#6b3ea0', '#1878aa', '#7a4014', '#2a7070', '#a03050', '#4a6030'];
+const PALETTE = ['#2f6fed', '#1fa67a', '#f2994a', '#9b6fd6', '#e5527a', '#17a2b8', '#8d6e63', '#7a8aa8', '#c0a43a', '#4a6030'];
 
 const S = {
   user: null, workspaces: [], ws: null,
@@ -666,6 +758,21 @@ function spentByCategory(mes) {
   return map;
 }
 
+const kMoney = (n) => `${n < 0 ? '−' : ''}$ ${fmtN(Math.abs(n))}`;
+function prevMonthOf(mes) {
+  const [y, m] = mes.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+// Variación contra el mes anterior. upGood: subir es bueno (ingresos, balance) o malo (gastos).
+function kVar(cur, prev, upGood) {
+  if (!prev) return `<div class="metric-var">${cur ? 'sin datos del mes anterior' : '= 0% vs. mes anterior'}</div>`;
+  const pct = ((cur - prev) / Math.abs(prev)) * 100;
+  if (Math.abs(pct) < 0.5) return '<div class="metric-var">= 0% vs. mes anterior</div>';
+  const up = pct > 0; const good = up === upGood;
+  const txt = Math.abs(pct) > 999 ? '+999' : Math.round(Math.abs(pct));
+  return `<div class="metric-var ${good ? 'good' : 'bad'}"><i class="ti ti-arrow-${up ? 'up' : 'down'}"></i>${txt}% <span class="lg">vs. mes anterior</span><span class="sh">vs. mes ant.</span></div>`;
+}
+
 function renderResumen() {
   const mes = $('#r-mes').value || curMonth();
   const mv = own().filter((t) => t.occurred_on.slice(0, 7) === mes);
@@ -674,11 +781,14 @@ function renderResumen() {
   const pill = $('#r-pill');
   pill.textContent = `${bal >= 0 ? '+' : '−'}${fmtN(Math.abs(bal))} ARS`;
   pill.className = 'pill-bal ' + (bal >= 0 ? 'pos' : 'neg');
-  $('#r-metrics').innerHTML = `
-    <div class="metric m-blue"><div class="metric-label">Ingresos</div><div class="metric-val">${fmtN(tI)}</div><div class="metric-sub">ARS en el mes</div></div>
-    <div class="metric m-red"><div class="metric-label">Gastos</div><div class="metric-val">${fmtN(tG)}</div><div class="metric-sub">ARS en el mes</div></div>
-    <div class="metric ${bal >= 0 ? 'm-green' : 'm-red'}"><div class="metric-label">Balance</div><div class="metric-val">${fmtN(bal)}</div><div class="metric-sub">ARS en el mes</div></div>
-    <div class="metric m-gray"><div class="metric-label">Movimientos</div><div class="metric-val">${mv.length}</div><div class="metric-sub">en el mes</div></div>`;
+  const pmv = own().filter((t) => t.occurred_on.slice(0, 7) === prevMonthOf(mes));
+  const pG = sumArs(pmv.filter((t) => t.kind === 'gasto')), pI = sumArs(pmv.filter((t) => t.kind === 'ingreso')), pBal = pI - pG;
+  const kpi = (cls, ico, label, val, sub) => `<div class="metric ${cls}"><div class="metric-ico"><i class="ti ti-${ico}"></i></div><div class="metric-body"><div class="metric-label">${label}</div><div class="metric-val">${val}</div>${sub}</div></div>`;
+  $('#r-metrics').innerHTML =
+    kpi('m-blue', 'arrow-down', 'Ingresos', kMoney(tI), kVar(tI, pI, true)) +
+    kpi('m-red', 'arrow-up', 'Gastos', kMoney(tG), kVar(tG, pG, false)) +
+    kpi(bal >= 0 ? 'm-green' : 'm-red', 'scale', 'Balance', kMoney(bal), kVar(bal, pBal, true)) +
+    kpi('m-gray', 'chart-bar', 'Movimientos', String(mv.length), '<div class="metric-var">en el mes</div>');
 
   // Saldos por cuenta (acumulado histórico, en la moneda de cada movimiento)
   const bals = {};
@@ -687,10 +797,11 @@ function renderResumen() {
   S.reimb.forEach((r) => { if (r.account_id && bals[r.account_id]) bals[r.account_id][r.currency] += r.amount; });
   const accHtml = Object.entries(bals).map(([id, b]) => {
     const a = accById(id); const main = a.currency === 'USD' ? 'USD' : 'ARS'; const other = main === 'ARS' ? 'USD' : 'ARS';
-    return `<div class="acc-card"><div class="acc-ico ${a.logo ? 'has-logo' : ''}">${accIcon(a)}</div>
-      <div class="acc-name">${esc(a.name)}</div>
-      <div class="acc-bal ${b[main] >= 0 ? 'pos' : 'neg'}">${fmtN(b[main])} <span style="font-size:11px;font-weight:400">${main}</span></div>
-      ${Math.abs(b[other]) > 0.004 ? `<div class="acc-sub">${fmtN(b[other])} ${other}</div>` : ''}</div>`;
+    return `<div class="acc-card"><div class="acc-top"><div class="acc-ico ${a.logo ? 'has-logo' : ''}">${accIcon(a)}</div>
+      <div class="acc-name">${esc(a.name)}</div></div>
+      <div class="acc-bal ${b[main] >= 0 ? 'pos' : 'neg'}"><span class="nw">${kMoney(b[main])}</span> <span style="font-size:11px;font-weight:400">${main}</span></div>
+      ${Math.abs(b[other]) > 0.004 ? `<div class="acc-sub">${fmtN(b[other])} ${other}</div>` : ''}
+      ${a.currency === 'ARS' ? `<button class="btn btn-ghost btn-xs" data-adjacc="${a.id}" style="margin-top:.45rem">Ajustar saldo</button>` : ''}</div>`;
   }).join('');
   $('#r-accounts').innerHTML = accHtml;
 
@@ -759,17 +870,23 @@ async function undoReimb(id) {
 
 function drawCharts(mes, gas) {
   [chCat, chBar, chLine].forEach((c) => c && c.destroy()); chCat = chBar = chLine = null;
+  Chart.defaults.font.family = "'DM Sans', system-ui, sans-serif";
   // dona por categoría
   const by = {};
   gas.forEach((t) => { by[t.category_id || ''] = (by[t.category_id || ''] || 0) + (t.amount_ars || 0); });
-  const entries = Object.entries(by).sort((a, b) => b[1] - a[1]);
-  const labels = entries.map(([id]) => (catById(id)?.name) || 'Sin categoría');
-  const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
-  $('#r-legend').innerHTML = labels.map((l, i) => `<span><i style="background:${colors[i]}"></i>${esc(l)}</span>`).join('');
-  if (entries.length) {
-    chCat = new Chart($('#ch-cat'), { type: 'doughnut', data: { labels, datasets: [{ data: entries.map((e) => e[1]), backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
-      options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.label}: $${fmtN(c.raw)}` } } } } });
-  }
+  const all = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([id, v]) => [(catById(id)?.name) || 'Sin categoría', v]);
+  // las 5 mayores + "Otros" (así la leyenda y la dona siempre coinciden)
+  const entries = all.length > 6 ? [...all.slice(0, 5), ['Otros', all.slice(5).reduce((s, e) => s + e[1], 0)]] : all;
+  const labels = entries.map((e) => e[0]);
+  const colors = labels.map((l, i) => (l === 'Otros' && all.length > 6 ? '#b6bfd1' : PALETTE[i % PALETTE.length]));
+  const tot = entries.reduce((s, e) => s + e[1], 0);
+  $('#r-legend').innerHTML = entries.length
+    ? entries.map((e, i) => `<div class="lg-row"><i style="background:${colors[i]}"></i><span class="lg-n">${esc(e[0])}</span><b>${Math.round((e[1] / tot) * 100)}%</b></div>`).join('')
+    : '<p class="hint">Sin gastos en este mes.</p>';
+  $('#r-donut').innerHTML = `<b>${kMoney(tot)}</b><span>Total</span>`;
+  chCat = new Chart($('#ch-cat'), { type: 'doughnut',
+    data: { labels: entries.length ? labels : ['Sin gastos'], datasets: [{ data: entries.length ? entries.map((e) => e[1]) : [1], backgroundColor: entries.length ? colors : ['#e6eaf2'], borderWidth: 2, borderColor: '#fff' }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { display: false }, tooltip: { enabled: entries.length > 0, callbacks: { label: (c) => `${c.label}: $${fmtN(c.raw)}` } } } } });
   // barras y línea: últimos 6 meses
   const ms = monthsList().slice(0, 6).reverse();
   const c = own();
@@ -778,10 +895,10 @@ function drawCharts(mes, gas) {
   const short = (v) => Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.abs(v) >= 1e3 ? Math.round(v / 1e3) + 'K' : Math.round(v);
   const scales = { x: { ticks: { font: { size: 11 }, color: '#a09e96' } }, y: { ticks: { font: { size: 11 }, color: '#a09e96', callback: short }, grid: { color: 'rgba(0,0,0,.04)' } } };
   chBar = new Chart($('#ch-bar'), { type: 'bar', data: { labels: ms.map(mLabel), datasets: [
-    { label: 'Ingresos', data: inc, backgroundColor: '#1a6644', borderRadius: 4 }, { label: 'Gastos', data: gst, backgroundColor: '#b83232', borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 11 } } } }, scales } });
+    { label: 'Ingresos', data: inc, backgroundColor: '#17996a', borderRadius: 4 }, { label: 'Gastos', data: gst, backgroundColor: '#dc3a3a', borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } } }, scales } });
   chLine = new Chart($('#ch-line'), { type: 'line', data: { labels: ms.map(mLabel), datasets: [{ label: 'Balance', data: ms.map((_, i) => inc[i] - gst[i]),
-    borderColor: '#2a4494', backgroundColor: 'rgba(42,68,148,.07)', tension: .35, fill: true, pointBackgroundColor: '#2a4494', pointRadius: 4, borderWidth: 2 }] },
+    borderColor: '#1f58c9', backgroundColor: 'rgba(31,88,201,.08)', tension: .35, fill: true, pointBackgroundColor: '#1f58c9', pointRadius: 4, borderWidth: 2 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales } });
 }
 
@@ -1133,9 +1250,9 @@ function renderResumenCuotas(mes) {
   if (!active.length && !delMes.length) { box.innerHTML = ''; return; }
   const pagadas = delMes.filter((t) => t.status === 'confirmado').reduce((a, t) => a + t.amount, 0);
   const porPagar = delMes.filter((t) => t.status === 'proyectado').reduce((a, t) => a + t.amount, 0);
-  box.innerHTML = `<div class="panel" style="margin-bottom:1rem"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;flex-wrap:wrap;margin-bottom:.3rem">
-    <span class="metric-label" style="margin:0">Cuotas · ${esc(mLabel(mes))}</span>
-    <span class="hint" style="font-family:'DM Mono',monospace">pagadas ${fmtN(pagadas)} · por pagar ${fmtN(porPagar)}</span></div>
+  box.innerHTML = `<div class="panel sect"><div class="sect-head">
+    <div class="sect-title"><span class="sect-ico"><i class="ti ti-calendar-event"></i></span>Cuotas · ${esc(mLabel(mes))}</div>
+    <span class="hint" style="font-family:'DM Mono',monospace">Pagadas: ${kMoney(pagadas)} | Por pagar: ${kMoney(porPagar)}</span></div>
     ${active.slice(0, 6).map(([p, st]) => { const pct = Math.round((st.paid / st.n) * 100); const card = S.cards.find((c) => c.id === p.card_id);
       return `<div class="mini-plan"><div class="mini-top"><span>${esc(p.description)} <span class="hint">· ${esc(card ? card.name : '')}</span></span><b style="font-family:'DM Mono',monospace;white-space:nowrap">${st.paid} de ${st.n}</b></div>
         <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div><div class="hint" style="margin-top:.2rem">Faltan ${st.n - st.paid} · quedan ${fmtN(st.remaining)} ARS</div></div>`; }).join('') || '<p class="hint">No tenés cuotas en curso.</p>'}
@@ -1152,6 +1269,44 @@ async function renamePlan(id) {
   must(await sb.from('installment_plans').update({ description: name }).eq('id', id));
   toast('Nombre cambiado ✓'); await loadData();
 }
+/* ---------- ajustar saldo de una cuenta (rendimientos, diferencias) ---------- */
+// "1.234.567,89" / "1234567,89" / "1234567.89" -> numero
+function parseAR(raw) {
+  let t = String(raw || '').replace(/[^\d.,-]/g, '');
+  if (!t) return NaN;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  else if ((t.match(/\./g) || []).length > 1 || /\.\d{3}$/.test(t)) t = t.replace(/\./g, '');
+  return Number(t);
+}
+function accBalanceArs(id) {
+  const a = accById(id); let b = a.opening_balance;
+  confirmed().forEach((t) => { if (t.account_id === id && t.currency === 'ARS') b += t.kind === 'ingreso' ? t.amount : -t.amount; });
+  S.reimb.forEach((r) => { if (r.account_id === id && r.currency === 'ARS') b += r.amount; });
+  return Math.round(b * 100) / 100;
+}
+async function adjustAccount(id) {
+  const a = accById(id); if (!a || a.currency !== 'ARS') return;
+  const cur = accBalanceArs(id);
+  const raw = prompt(`¿Cuánto dice ${a.name} que tenés realmente?\n(En la app figura ${fmtN(cur)}.)`, '');
+  if (raw === null || !raw.trim()) return;
+  const real = parseAR(raw); if (!isFinite(real)) throw new Error('No entendí ese número');
+  const diff = Math.round((real - cur) * 100) / 100;
+  if (Math.abs(diff) < 0.01) { toast('El saldo ya coincide ✓'); return; }
+  const gain = diff > 0; const amount = Math.abs(diff);
+  const kind = gain ? 'ingreso' : 'gasto'; const name = gain ? 'Rendimientos' : 'Ajuste de saldo';
+  const msg = gain
+    ? `Faltan $${fmtN(amount)} en la app. Se registra un ingreso «Rendimientos» en ${a.name}. ¿Seguir?`
+    : `En la app hay $${fmtN(amount)} de más. Puede ser un gasto que no cargaste. Se registra un gasto «Ajuste de saldo» en ${a.name}. ¿Seguir?`;
+  if (!confirm(msg)) return;
+  let cat = S.cats.find((c) => c.kind === kind && !c.archived && normS(c.name) === normS(name));
+  if (!cat) { cat = await addRow('categories', { name, kind }, S.cats); S.cats.sort((x, y) => x.name.localeCompare(y.name)); }
+  must(await sb.from('transactions').insert({
+    workspace_id: S.ws.id, kind, status: 'confirmado', occurred_on: localDate(), amount, currency: 'ARS', description: name,
+    category_id: cat.id, account_id: id, payment_method: 'otro', expense_type: gain ? null : 'variable', source: 'manual', tags: ['ajuste']
+  }));
+  toast(`${name}: ${fmtN(amount)} ✓`); await loadData();
+}
+
 async function registerCardPayment() {
   const card = $('#q-card').value, due = $('#q-due').value, paid = $('#q-paidon').value, total = parseFloat($('#q-total').value);
   if (!card) throw new Error('Elegí la tarjeta');
@@ -1613,6 +1768,7 @@ function bindEvents() {
     $$('.tab-btn').forEach((x) => x.classList.toggle('active', x === b));
     $$('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab));
     window.scrollTo({ top: 0 });
+    if (b.dataset.scroll) $('#cfg-' + b.dataset.scroll)?.scrollIntoView({ block: 'start' });
   }));
   $('#ws-select').onchange = (e) => guard(() => switchWorkspace(e.target.value));
   $('#btn-refresh').onclick = (e) => guard(async () => { await loadData(); toast('Datos actualizados'); }, e.currentTarget);
@@ -1680,15 +1836,16 @@ function bindEvents() {
   $('#btn-json').onclick = () => download('misfinanzas-backup.json', JSON.stringify({ exportado: new Date().toISOString(), espacio: S.ws, categorias: S.cats, cuentas: S.accounts, tarjetas: S.cards, presupuestos: S.budgets, movimientos: S.txs, reintegros: S.reimb }, null, 2), 'application/json');
   // Delegación de eventos para botones generados dinámicamente
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-nologo],[data-viewpdf],[data-renplan],[data-paygo],[data-delstm],[data-gotab],#btn-stm-save,#btn-stm-cancel,[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
+    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-nologo],[data-viewpdf],[data-adjacc],[data-renplan],[data-paygo],[data-delstm],[data-gotab],#btn-stm-save,#btn-stm-cancel,[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
     if (t.id === 'btn-reimb') return guard(registerReimb, t);
     if (t.id === 'btn-stm-save') return guard(saveStatement, t);
     if (t.id === 'btn-stm-cancel') { S.stm = null; $('#q-file').value = ''; $('#q-preview').innerHTML = ''; return; }
+    if (t.dataset.adjacc) return guard(() => adjustAccount(t.dataset.adjacc));
     if (t.dataset.renplan) return guard(() => renamePlan(t.dataset.renplan));
     if (t.dataset.viewpdf) return guard(() => openPdf(t.dataset.viewpdf));
     if (t.dataset.paygo) return guard(() => payStatement(t.dataset.paygo), t);
     if (t.dataset.delstm) return guard(() => deleteStatement(t.dataset.delstm));
-    if (t.dataset.gotab) { const b = $$('.tab-btn').find((x) => x.dataset.tab === t.dataset.gotab); if (b) b.click(); return; }
+    if (t.dataset.gotab) { const b = $$('.tab-btn').find((x) => x.dataset.tab === t.dataset.gotab); if (b) { b.click(); if (t.dataset.scroll) $('#cfg-' + t.dataset.scroll)?.scrollIntoView({ block: 'start' }); } return; }
     if (t.dataset.nologo) return guard(() => setLogo(t.dataset.nologo, null));
     if (t.dataset.togtype) return guard(() => toggleType(t.dataset.togtype));
     if (t.dataset.undoreimb) return guard(() => undoReimb(t.dataset.undoreimb));
