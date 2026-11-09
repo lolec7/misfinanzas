@@ -96,6 +96,7 @@ textarea{resize:vertical;min-height:54px}
 .type-btn{display:flex;align-items:center;gap:6px;padding:.5rem 1.1rem;border-radius:var(--pill);font-size:13px;font-weight:600;cursor:pointer;border:0.5px solid var(--border);background:var(--surface);color:var(--text2)}
 .type-btn.t-gasto{background:var(--red-bg);color:var(--red);border-color:var(--red-bd)}
 .type-btn.t-ingreso{background:var(--green-bg);color:var(--green);border-color:var(--green-bd)}
+.type-btn.t-transf{background:var(--accent-light);color:var(--accent);border-color:#b9cdf3}
 
 
 /* ---------- Sincronizar hoja ---------- */
@@ -161,7 +162,7 @@ textarea{resize:vertical;min-height:54px}
 button.chip{font-family:inherit;cursor:pointer;-webkit-appearance:none;appearance:none;min-height:24px;padding:.2rem .65rem}
 button.chip:active{opacity:.6}
 .tx-amt{text-align:right;font-family:'DM Mono',monospace;font-weight:600;white-space:nowrap}
-.tx-amt.g{color:var(--red)}.tx-amt.i{color:var(--green)}
+.tx-amt.g{color:var(--red)}.tx-amt.i{color:var(--green)}.tx-amt.t{color:var(--accent)}
 .tx-amt small{display:block;font-size:10px;font-weight:400;color:var(--text3)}
 .empty{text-align:center;padding:2.2rem 1rem;color:var(--text3)}
 .empty i{font-size:34px;display:block;margin-bottom:.4rem;opacity:.35}
@@ -282,6 +283,7 @@ body{background:linear-gradient(180deg,#f3f6fc 0,#e9eff8 100%) fixed}
 @media(max-width:700px){
   .metric{gap:.6rem;padding:.8rem .8rem}.metric-ico{width:34px;height:34px;font-size:18px}.metric-val{font-size:17px}
   .page-sub{display:none}
+  #t-panel .form-grid .fg{grid-column:1/-1}
   .metric-var .lg{display:none}.metric-var .sh{display:inline}
   .acc-bal{font-size:16px}
   .metrics{grid-template-columns:1fr 1fr}
@@ -387,7 +389,8 @@ body{background:linear-gradient(180deg,#f3f6fc 0,#e9eff8 100%) fixed}
       <div class="metrics" id="r-metrics"></div>
       <div id="r-reimb"></div>
       <div class="panel sect"><div class="sect-head"><div class="sect-title"><span class="sect-ico"><i class="ti ti-building-bank"></i></span>Tus cuentas y saldos</div>
-        <button class="link-btn" type="button" data-gotab="config" data-scroll="accounts">Ver todas →</button></div>
+        <span style="display:flex;gap:1rem;align-items:center"><button class="link-btn" type="button" data-xfer="1"><i class="ti ti-arrows-exchange"></i> Transferir</button>
+        <button class="link-btn" type="button" data-gotab="config" data-scroll="accounts">Ver todas →</button></span></div>
         <div class="accounts" id="r-accounts"></div></div>
       <div id="r-cuotas"></div>
       <div class="charts">
@@ -407,8 +410,25 @@ body{background:linear-gradient(180deg,#f3f6fc 0,#e9eff8 100%) fixed}
       <div class="type-bar">
         <button class="type-btn t-gasto" id="tp-gasto" type="button"><i class="ti ti-arrow-up"></i>Gasto</button>
         <button class="type-btn" id="tp-ingreso" type="button"><i class="ti ti-arrow-down"></i>Ingreso</button>
+        <button class="type-btn" id="tp-transf" type="button"><i class="ti ti-arrows-exchange"></i>Transferencia</button>
       </div>
-      <div class="panel">
+      <div class="panel hidden" id="t-panel">
+        <div id="t-warn"></div>
+        <p class="hint" style="margin-bottom:.8rem">Pasar plata de una cuenta a otra (sacar efectivo, transferirte entre bancos, comprar dólares). No cuenta como ingreso ni como gasto: solo mueve el saldo.</p>
+        <div class="form-grid">
+          <div class="fg"><label for="t-fecha">Fecha</label><input type="date" id="t-fecha"></div>
+          <div class="fg"><label for="t-monto" id="t-lmonto">Monto</label><input type="number" id="t-monto" inputmode="decimal" placeholder="0,00" min="0" step="0.01"></div>
+          <div class="fg"><label for="t-from">Desde</label><select id="t-from"></select><span class="hint" id="t-fromhint"></span></div>
+          <div class="fg"><label for="t-to">Hacia</label><select id="t-to"></select><span class="hint" id="t-tohint"></span></div>
+          <div class="fg full hidden" id="t-gin"><label for="t-in" id="t-lin">Monto que entra</label><input type="number" id="t-in" inputmode="decimal" placeholder="0,00" min="0" step="0.01"><span class="hint" id="t-fxhint"></span></div>
+          <div class="fg full"><label for="t-notes">Nota</label><input id="t-notes" maxlength="120" placeholder="Opcional. Ej: retiro cajero" autocomplete="off"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" id="t-swap" type="button"><i class="ti ti-arrows-exchange"></i>Invertir</button>
+          <button class="btn btn-primary" id="t-save" type="button"><i class="ti ti-check"></i>Transferir</button>
+        </div>
+      </div>
+      <div class="panel" id="f-panel">
         <div class="form-grid">
           <div class="fg"><label for="f-fecha">Fecha</label><input type="date" id="f-fecha"></div>
           <div class="fg"><label for="f-monto">Monto</label><input type="number" id="f-monto" inputmode="decimal" placeholder="0,00" min="0" step="0.01"></div>
@@ -453,7 +473,7 @@ body{background:linear-gradient(180deg,#f3f6fc 0,#e9eff8 100%) fixed}
         <button class="btn btn-ghost btn-sm" id="btn-csv"><i class="ti ti-download"></i>CSV del mes</button></span></div>
       <div class="filters">
         <select id="m-mes" class="select-sm" aria-label="Mes"></select>
-        <select id="m-tipo" class="select-sm" aria-label="Tipo"><option value="">Todos</option><option value="gasto">Gastos</option><option value="ingreso">Ingresos</option></select>
+        <select id="m-tipo" class="select-sm" aria-label="Tipo"><option value="">Todos</option><option value="gasto">Gastos</option><option value="ingreso">Ingresos</option><option value="transferencia">Transferencias</option></select>
         <select id="m-cat" class="select-sm" aria-label="Categoría"></select>
       </div>
       <div class="panel" style="padding:0" id="m-list"></div>
@@ -625,7 +645,7 @@ const PALETTE = ['#2f6fed', '#1fa67a', '#f2994a', '#9b6fd6', '#e5527a', '#17a2b8
 
 const S = {
   user: null, workspaces: [], ws: null,
-  cats: [], accounts: [], cards: [], budgets: [], txs: [], reimb: [], reimbOff: new Set(), plans: [], stmts: [], cuotasOk: true,
+  cats: [], accounts: [], cards: [], budgets: [], txs: [], reimb: [], reimbOff: new Set(), plans: [], stmts: [], cuotasOk: true, transfers: [], transfersOk: true, xfer: false, xferKey: null,
   tipo: 'gasto', fxCache: {}, booted: false, subTouched: false
 };
 let sb = null;
@@ -696,6 +716,11 @@ async function loadData() {
       ]);
       S.plans = plans.map((x) => ({ ...x, total_amount: Number(x.total_amount) })); S.stmts = stmts; S.cuotasOk = true;
     } catch (e2) { console.warn('Cuotas no disponibles (¿falta el SQL 07?)', e2); S.plans = []; S.stmts = []; S.cuotasOk = false; }
+    // Transferencias: si todavia no corriste el SQL 11, el resto de la app sigue andando
+    try {
+      const xs = await fetchAll(() => sb.from('transfers').select('*').eq('workspace_id', ws).order('occurred_on', { ascending: false }).order('id'));
+      S.transfers = xs.map((x) => ({ ...x, amount_out: Number(x.amount_out), amount_in: Number(x.amount_in), fx_rate: x.fx_rate == null ? null : Number(x.fx_rate) })); S.transfersOk = true;
+    } catch (e3) { console.warn('Transferencias no disponibles (¿falta el SQL 11?)', e3); S.transfers = []; S.transfersOk = false; }
     setSync('ok', 'Sincronizado');
   } catch (e) {
     setSync('err', 'Sin conexión'); throw e;
@@ -705,6 +730,7 @@ async function loadData() {
 
 function renderAll() {
   fillMonthSelects(); fillCatalogSelects(); renderResumen(); renderMovs(); renderBudgets(); renderCuotas(); renderConfig();
+  if (S.xfer) renderTransferPanel();
 }
 
 /* ---------- meses ---------- */
@@ -792,9 +818,7 @@ function renderResumen() {
 
   // Saldos por cuenta (acumulado histórico, en la moneda de cada movimiento)
   const bals = {};
-  S.accounts.filter((a) => !a.archived).forEach((a) => { bals[a.id] = { ARS: a.currency === 'ARS' ? a.opening_balance : 0, USD: a.currency === 'USD' ? a.opening_balance : 0 }; });
-  confirmed().forEach((t) => { if (t.account_id && bals[t.account_id]) bals[t.account_id][t.currency] += t.kind === 'ingreso' ? t.amount : -t.amount; });
-  S.reimb.forEach((r) => { if (r.account_id && bals[r.account_id]) bals[r.account_id][r.currency] += r.amount; });
+  S.accounts.filter((a) => !a.archived).forEach((a) => { bals[a.id] = accBalances(a); });
   const accHtml = Object.entries(bals).map(([id, b]) => {
     const a = accById(id); const main = a.currency === 'USD' ? 'USD' : 'ARS'; const other = main === 'ARS' ? 'USD' : 'ARS';
     return `<div class="acc-card"><div class="acc-top"><div class="acc-ico ${a.logo ? 'has-logo' : ''}">${accIcon(a)}</div>
@@ -906,7 +930,7 @@ function drawCharts(mes, gas) {
    CARGAR
    ===================================================================== */
 function setTipo(t) {
-  S.tipo = t;
+  S.tipo = t; S.xfer = false; $('#f-panel').classList.remove('hidden'); $('#t-panel').classList.add('hidden'); $('#tp-transf').className = 'type-btn';
   $('#tp-gasto').className = 'type-btn' + (t === 'gasto' ? ' t-gasto' : '');
   $('#tp-ingreso').className = 'type-btn' + (t === 'ingreso' ? ' t-ingreso' : '');
   ['g-sub', 'g-medio', 'g-reimb'].forEach((id) => $('#' + id).classList.toggle('hidden', t !== 'gasto'));
@@ -1013,9 +1037,11 @@ function renderMovs() {
   let mv = S.txs.filter((t) => t.occurred_on.slice(0, 7) === mes);
   if (tipo) mv = mv.filter((t) => t.kind === tipo);
   if (cat) mv = mv.filter((t) => t.category_id === cat);
+  let xs = S.transfers.filter((x) => x.occurred_on.slice(0, 7) === mes);
+  if (cat || (tipo && tipo !== 'transferencia')) xs = [];
   const box = $('#m-list');
-  if (!mv.length) { box.innerHTML = '<div class="empty"><i class="ti ti-inbox"></i>Sin movimientos para este período</div>'; $('#m-count').textContent = ''; return; }
-  box.innerHTML = mv.map((t) => {
+  if (!mv.length && !xs.length) { box.innerHTML = '<div class="empty"><i class="ti ti-inbox"></i>Sin movimientos para este período</div>'; $('#m-count').textContent = ''; return; }
+  const txHtml = (t) => {
     const c = catById(t.category_id), a = accById(t.account_id), k = cardById(t.card_id);
     const sign = t.kind === 'ingreso' ? '+' : '−';
     const main = t.currency === 'USD' ? `${sign}USD ${fmtD(t.amount)}` : `${sign}${fmtN(t.amount)}`;
@@ -1029,8 +1055,81 @@ function renderMovs() {
           ${t.status === 'proyectado' ? '<span class="chip proj">proyectado</span>' : ''}${t.tags.map((x) => `<span class="chip">#${esc(x)}</span>`).join('')}</div></div>
       <div class="tx-amt ${t.kind === 'ingreso' ? 'i' : 'g'}">${main}${sub}</div>
       <button class="btn btn-danger btn-xs" data-del="${t.id}" aria-label="Eliminar"><i class="ti ti-trash"></i></button></div>`;
-  }).join('');
-  $('#m-count').textContent = `${mv.length} movimiento${mv.length === 1 ? '' : 's'}`;
+  };
+  const xferHtml = (x) => {
+    const f = accById(x.from_account_id), to = accById(x.to_account_id);
+    const cf = f ? f.currency : 'ARS', ct = to ? to.currency : 'ARS';
+    const m = (n, c) => (c === 'USD' ? `USD ${fmtD(n)}` : fmtN(n));
+    return `<div class="tx">
+      <div class="tx-date">${x.occurred_on.slice(8, 10)}/${x.occurred_on.slice(5, 7)}</div>
+      <div class="tx-main"><div class="tx-desc"><i class="ti ti-arrows-exchange" style="color:var(--accent)"></i> ${esc(f ? f.name : '¿?')} → ${esc(to ? to.name : '¿?')}</div>
+        <div class="tx-meta"><span class="chip">transferencia</span>${x.notes ? `<span class="chip">${esc(x.notes)}</span>` : ''}</div></div>
+      <div class="tx-amt t">${m(x.amount_out, cf)}${cf === ct ? '' : `<small>→ ${m(x.amount_in, ct)}${x.fx_rate ? ' · cot. ' + fmtN(x.fx_rate) : ''}</small>`}</div>
+      <button class="btn btn-danger btn-xs" data-deltransfer="${x.id}" aria-label="Eliminar transferencia"><i class="ti ti-trash"></i></button></div>`;
+  };
+  // Movimientos y transferencias juntos, de la fecha más nueva a la más vieja (el orden entre los del mismo día se respeta)
+  const items = [...mv.map((t) => ({ d: t.occurred_on, h: txHtml(t) })), ...xs.map((x) => ({ d: x.occurred_on, h: xferHtml(x) }))]
+    .sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+  box.innerHTML = items.map((i) => i.h).join('');
+  $('#m-count').textContent = `${mv.length} movimiento${mv.length === 1 ? '' : 's'}${xs.length ? ` · ${xs.length} transferencia${xs.length === 1 ? '' : 's'}` : ''}`;
+}
+async function deleteTransfer(id) {
+  if (!confirm('¿Eliminar esta transferencia? Los saldos de las dos cuentas vuelven a como estaban antes de hacerla.')) return;
+  must(await sb.from('transfers').delete().eq('id', id));
+  S.transfers = S.transfers.filter((x) => x.id !== id);
+  renderResumen(); renderMovs(); if (S.xfer) renderTransferPanel(); toast('Transferencia eliminada');
+}
+
+/* ---------- transferencias entre cuentas ---------- */
+const newKey = () => 'ui:' + ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
+function showTransfer(on) {
+  S.xfer = on;
+  $('#f-panel').classList.toggle('hidden', on); $('#t-panel').classList.toggle('hidden', !on);
+  $('#tp-transf').className = 'type-btn' + (on ? ' t-transf' : '');
+  if (on) { $('#tp-gasto').className = 'type-btn'; $('#tp-ingreso').className = 'type-btn'; renderTransferPanel(); }
+  else setTipo(S.tipo);
+}
+function renderTransferPanel() {
+  $('#t-warn').innerHTML = S.transfersOk ? '' : '<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Falta correr el <b>SQL 11</b> en Supabase para poder guardar transferencias.</span></div>';
+  const accs = S.accounts.filter((a) => !a.archived);
+  const prevF = $('#t-from').value, prevT = $('#t-to').value;
+  const opts = accs.map((a) => `<option value="${a.id}">${esc(a.name)} (${a.currency})</option>`).join('');
+  $('#t-from').innerHTML = opts; $('#t-to').innerHTML = opts;
+  if (accs.some((a) => a.id === prevF)) $('#t-from').value = prevF;
+  if (accs.some((a) => a.id === prevT)) $('#t-to').value = prevT;
+  if ($('#t-to').value === $('#t-from').value && accs.length > 1) $('#t-to').value = accs.find((a) => a.id !== $('#t-from').value).id;
+  if (!$('#t-fecha').value) $('#t-fecha').value = localDate();
+  onTransferChange();
+}
+function onTransferChange() {
+  const f = accById($('#t-from').value), t = accById($('#t-to').value);
+  const hint = (a) => { if (!a) return ''; const b = accBalances(a); return `En la app: ${a.currency === 'USD' ? 'USD ' + fmtD(b.USD) : '$ ' + fmtN(b.ARS)}`; };
+  $('#t-fromhint').textContent = hint(f); $('#t-tohint').textContent = hint(t);
+  const cross = !!(f && t && f.currency !== t.currency);
+  $('#t-gin').classList.toggle('hidden', !cross);
+  $('#t-lmonto').textContent = f ? `Monto que sale (${f.currency})` : 'Monto';
+  if (cross) {
+    $('#t-lin').textContent = `Monto que entra (${t.currency})`;
+    const o = parseFloat($('#t-monto').value), i = parseFloat($('#t-in').value);
+    $('#t-fxhint').textContent = o > 0 && i > 0 ? `Cotización: ${fmtN(f.currency === 'ARS' ? o / i : i / o)} ARS por 1 USD` : 'Las cuentas tienen distinta moneda: cargá los dos montos.';
+  } else $('#t-fxhint').textContent = '';
+}
+async function saveTransfer() {
+  if (!S.transfersOk) throw new Error('Falta correr el SQL 11 en Supabase');
+  const from = $('#t-from').value, to = $('#t-to').value, on = $('#t-fecha').value, out = parseFloat($('#t-monto').value);
+  if (!from || !to) throw new Error('Elegí las dos cuentas');
+  if (from === to) throw new Error('Elegí dos cuentas distintas');
+  if (!(out > 0)) throw new Error('Ingresá el monto');
+  if (!on) throw new Error('Falta la fecha');
+  const f = accById(from), t = accById(to); let inn = null;
+  if (f.currency !== t.currency) { inn = parseFloat($('#t-in').value); if (!(inn > 0)) throw new Error(`Ingresá cuánto entra en ${t.currency}`); }
+  const after = accBalances(f)[f.currency] - out;
+  if (after < 0 && accBalances(f)[f.currency] >= 0 && !confirm(`El saldo de ${f.name} en la app quedaría en ${f.currency === 'USD' ? 'USD ' + fmtD(after) : '$ ' + fmtN(after)}. ¿Transferir igual?`)) return;
+  if (!S.xferKey) S.xferKey = newKey(); // misma clave si reintentás: no se duplica
+  const r = must(await sb.rpc('create_transfer', { p_workspace: S.ws.id, p_from: from, p_to: to, p_on: on, p_amount_out: out, p_amount_in: inn, p_notes: $('#t-notes').value.trim(), p_external: S.xferKey }));
+  S.xferKey = null; $('#t-monto').value = ''; $('#t-in').value = ''; $('#t-notes').value = '';
+  toast(r.message || 'Transferencia registrada', r.duplicate ? '' : 'ok');
+  await loadData();
 }
 async function deleteTx(id) {
   if (!confirm('¿Eliminar este movimiento?')) return;
@@ -1278,12 +1377,16 @@ function parseAR(raw) {
   else if ((t.match(/\./g) || []).length > 1 || /\.\d{3}$/.test(t)) t = t.replace(/\./g, '');
   return Number(t);
 }
-function accBalanceArs(id) {
-  const a = accById(id); let b = a.opening_balance;
-  confirmed().forEach((t) => { if (t.account_id === id && t.currency === 'ARS') b += t.kind === 'ingreso' ? t.amount : -t.amount; });
-  S.reimb.forEach((r) => { if (r.account_id === id && r.currency === 'ARS') b += r.amount; });
-  return Math.round(b * 100) / 100;
+// Saldo de una cuenta por moneda = inicial + ingresos − gastos + reintegros − transferencias que salen + transferencias que entran
+function accBalances(a) {
+  const b = { ARS: a.currency === 'ARS' ? a.opening_balance : 0, USD: a.currency === 'USD' ? a.opening_balance : 0 };
+  confirmed().forEach((t) => { if (t.account_id === a.id) b[t.currency] += t.kind === 'ingreso' ? t.amount : -t.amount; });
+  S.reimb.forEach((r) => { if (r.account_id === a.id) b[r.currency] += r.amount; });
+  S.transfers.forEach((x) => { if (x.from_account_id === a.id) b[a.currency] -= x.amount_out; if (x.to_account_id === a.id) b[a.currency] += x.amount_in; });
+  b.ARS = Math.round(b.ARS * 100) / 100; b.USD = Math.round(b.USD * 100) / 100;
+  return b;
 }
+function accBalanceArs(id) { return accBalances(accById(id)).ARS; }
 async function adjustAccount(id) {
   const a = accById(id); if (!a || a.currency !== 'ARS') return;
   const cur = accBalanceArs(id);
@@ -1774,7 +1877,10 @@ function bindEvents() {
   $('#btn-refresh').onclick = (e) => guard(async () => { await loadData(); toast('Datos actualizados'); }, e.currentTarget);
   $('#r-mes').onchange = renderResumen;
   ['m-mes', 'm-tipo', 'm-cat'].forEach((id) => ($('#' + id).onchange = renderMovs));
-  $('#tp-gasto').onclick = () => setTipo('gasto'); $('#tp-ingreso').onclick = () => setTipo('ingreso');
+  $('#tp-gasto').onclick = () => setTipo('gasto'); $('#tp-ingreso').onclick = () => setTipo('ingreso'); $('#tp-transf').onclick = () => showTransfer(true);
+  ['t-from', 't-to'].forEach((id) => $('#' + id).addEventListener('change', onTransferChange)); ['t-monto', 't-in'].forEach((id) => $('#' + id).addEventListener('input', onTransferChange));
+  $('#t-swap').onclick = () => { const a = $('#t-from').value; $('#t-from').value = $('#t-to').value; $('#t-to').value = a; onTransferChange(); };
+  $('#t-save').onclick = (e) => guard(saveTransfer, e.currentTarget);
   $('#f-medio').onchange = onMedioChange; $('#f-moneda').onchange = onMonedaChange;
   $('#f-desc').oninput = applyRemembered;
   $('#f-sub').onchange = () => { S.subTouched = true; $('#f-subhint').textContent = ''; };
@@ -1833,14 +1939,16 @@ function bindEvents() {
     else if (b.id === 'sy-all') { const on = !SY.rows.filter((r) => !r.bad).every((r) => r.include); SY.rows.forEach((r) => { if (!r.bad) r.include = on; }); renderSync(); }
     else if (b.id === 'sy-save') guard(saveSync, b);
   });
-  $('#btn-json').onclick = () => download('misfinanzas-backup.json', JSON.stringify({ exportado: new Date().toISOString(), espacio: S.ws, categorias: S.cats, cuentas: S.accounts, tarjetas: S.cards, presupuestos: S.budgets, movimientos: S.txs, reintegros: S.reimb }, null, 2), 'application/json');
+  $('#btn-json').onclick = () => download('misfinanzas-backup.json', JSON.stringify({ exportado: new Date().toISOString(), espacio: S.ws, categorias: S.cats, cuentas: S.accounts, tarjetas: S.cards, presupuestos: S.budgets, movimientos: S.txs, reintegros: S.reimb, transferencias: S.transfers }, null, 2), 'application/json');
   // Delegación de eventos para botones generados dinámicamente
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-nologo],[data-viewpdf],[data-adjacc],[data-renplan],[data-paygo],[data-delstm],[data-gotab],#btn-stm-save,#btn-stm-cancel,[data-switch],[data-undoreimb],[data-togtype],#btn-reimb'); if (!t) return;
+    const t = e.target.closest('[data-del],[data-delbudget],[data-arch],[data-nologo],[data-viewpdf],[data-adjacc],[data-renplan],[data-paygo],[data-delstm],[data-gotab],#btn-stm-save,#btn-stm-cancel,[data-switch],[data-undoreimb],[data-togtype],[data-deltransfer],[data-xfer],#btn-reimb'); if (!t) return;
     if (t.id === 'btn-reimb') return guard(registerReimb, t);
     if (t.id === 'btn-stm-save') return guard(saveStatement, t);
     if (t.id === 'btn-stm-cancel') { S.stm = null; $('#q-file').value = ''; $('#q-preview').innerHTML = ''; return; }
     if (t.dataset.adjacc) return guard(() => adjustAccount(t.dataset.adjacc));
+    if (t.dataset.deltransfer) return guard(() => deleteTransfer(t.dataset.deltransfer));
+    if (t.dataset.xfer) { const b = $$('.tab-btn').find((x) => x.dataset.tab === 'cargar'); if (b) b.click(); showTransfer(true); return; }
     if (t.dataset.renplan) return guard(() => renamePlan(t.dataset.renplan));
     if (t.dataset.viewpdf) return guard(() => openPdf(t.dataset.viewpdf));
     if (t.dataset.paygo) return guard(() => payStatement(t.dataset.paygo), t);
