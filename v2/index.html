@@ -485,6 +485,7 @@ body{background:linear-gradient(180deg,#f3f6fc 0,#e9eff8 100%) fixed}
     <section id="tab-cuotas" class="tab">
       <div class="page-head"><span class="page-title">Cuotas</span><span class="hint">Tarjetas de crédito · en pesos</span></div>
       <div id="q-warn"></div>
+      <div id="q-next"></div>
       <div id="q-summary"></div>
       <div id="q-active"></div>
       <details id="q-done-box" class="hidden" style="margin-bottom:1rem"><summary class="hint" style="cursor:pointer;margin-bottom:.5rem">Planes terminados</summary><div id="q-done"></div></details>
@@ -994,7 +995,7 @@ async function toggleType(id) {
   if (ids.length > 1 && !confirm(`«${t.description}» aparece en ${ids.length} gastos. ¿Marcarlos todos como ${nuevo}?`)) return;
   must(await sb.from('transactions').update({ expense_type: nuevo }).in('id', ids));
   S.txs.forEach((x) => { if (ids.includes(x.id)) x.expense_type = nuevo; });
-  renderResumen(); renderMovs(); renderBudgets();
+  renderResumen(); renderMovs(); renderBudgets(); renderCuotas();
   toast(k ? `«${t.description}» ahora es ${nuevo}. Lo voy a recordar ✓` : `Marcado como ${nuevo} ✓`);
 }
 async function saveTx() {
@@ -1176,7 +1177,57 @@ function planHtml(p) {
       <span>${done ? '' : st.last ? 'Última: ' + ymLabel(st.last.occurred_on.slice(0, 7)) : ''}</span></div>
     ${st.overdue.length ? `<div class="plan-foot" style="color:var(--amber)"><span>⚠ ${st.overdue.length} cuota(s) de meses anteriores sin pago registrado</span></div>` : ''}</div>`;
 }
+/* ---------- próximo mes: cuotas + gastos fijos (estimado) ----------
+   No hay tabla aparte: igual que el tipo fijo/variable, la fuente de verdad es el historial.
+   Un concepto «fijo» se proyecta si se pagó en este mes o en el anterior (si no, se asume dado
+   de baja). El monto estimado es el promedio mensual de los últimos 3 meses en los que apareció. */
+const nextMonthOf = (ym) => { const [y, m] = ym.split('-').map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; };
+const isPlainExpense = (t) => t.kind === 'gasto' && t.status === 'confirmado' && t.source !== 'cuotas' && !t.installment_plan_id && !t.reimbursable_by && !(t.tags || []).includes('ajuste');
+function conceptsByType(type) {
+  const cur = curMonth(), m1 = prevMonthOf(cur), m2 = prevMonthOf(m1); const by = new Map();
+  for (const t of S.txs) {
+    if (!isPlainExpense(t) || t.expense_type !== type) continue;
+    const ym = t.occurred_on.slice(0, 7); if (ym !== cur && ym !== m1 && ym !== m2) continue;
+    const k = normS(t.description); if (k.length < 2) continue;
+    let c = by.get(k); if (!c) by.set(k, c = { k, months: {}, last: t, count: 0 });
+    c.months[ym] = (c.months[ym] || 0) + (t.amount_ars || 0); c.count++;
+    if (t.occurred_on > c.last.occurred_on || (t.occurred_on === c.last.occurred_on && String(t.created_at) > String(c.last.created_at))) c.last = t;
+  }
+  return { by, cur, m1 };
+}
+function projectFixed() {
+  const { by, cur, m1 } = conceptsByType('fijo'); const out = [];
+  for (const c of by.values()) {
+    if (!c.months[cur] && !c.months[m1]) continue; // sin pagos en los últimos 2 meses
+    const vals = Object.values(c.months); const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    out.push({ ...c, est: Math.round(avg), varies: vals.length > 1 && vals.some((v) => Math.abs(v - avg) > avg * 0.1) });
+  }
+  return out.sort((a, b) => b.est - a.est);
+}
+function renderNextMonth() {
+  const box = $('#q-next'); if (!box) return;
+  const next = nextMonthOf(curMonth());
+  const cuotas = S.txs.filter((t) => t.status === 'proyectado' && t.source === 'cuotas' && t.occurred_on.slice(0, 7) === next).reduce((a, t) => a + t.amount, 0);
+  const fijos = projectFixed(); const totFijos = fijos.reduce((a, f) => a + f.est, 0);
+  const { by: varBy, cur, m1 } = conceptsByType('variable');
+  const cands = [...varBy.values()].filter((c) => c.months[cur] || c.months[m1]).sort((a, b) => b.count - a.count || (b.last.amount_ars || 0) - (a.last.amount_ars || 0)).slice(0, 12);
+  const M = (n) => `<b style="font-family:'DM Mono',monospace">${fmtN(n)}</b>`;
+  box.innerHTML = `<div class="panel sect"><div class="sect-head"><div class="sect-title"><span class="sect-ico"><i class="ti ti-calendar-event"></i></span>Próximo mes · ${esc(mLabel(next))}</div><span class="hint">estimado, en pesos</span></div>
+    <div class="month-row"><span>Cuotas de tarjeta</span>${M(cuotas)}</div>
+    <div class="month-row"><span>Gastos fijos (${fijos.length})</span>${M(totFijos)}</div>
+    <div class="month-row"><span><b>Total comprometido</b></span>${M(cuotas + totFijos)}</div>
+    <details style="margin-top:.6rem"${fijos.length ? '' : ' open'}><summary class="hint" style="cursor:pointer">Gastos fijos que estoy contando</summary>
+      ${fijos.length ? fijos.map((f) => `<div class="month-row" style="align-items:center;gap:.5rem"><span style="min-width:0;overflow-wrap:anywhere">${esc(f.last.description)}${catById(f.last.category_id) ? ` <span class="chip">${esc(catById(f.last.category_id).name)}</span>` : ''}${f.varies ? ' <span class="hint">≈ promedio</span>' : ''}</span>
+        <span style="display:flex;gap:.4rem;align-items:center;white-space:nowrap">${M(f.est)}<button class="btn btn-ghost btn-xs" data-togtype="${f.last.id}" aria-label="Dejar de contarlo como fijo">Quitar</button></span></div>`).join('') : '<p class="hint" style="margin:.4rem 0">Todavía no marcaste gastos fijos. Abrí «¿Falta alguno?» y marcá los que se repiten todos los meses.</p>'}
+    </details>
+    <details style="margin-top:.4rem"><summary class="hint" style="cursor:pointer">¿Falta alguno? Marcar como fijo</summary>
+      ${cands.length ? cands.map((c) => `<div class="month-row" style="align-items:center;gap:.5rem"><span style="min-width:0;overflow-wrap:anywhere">${esc(c.last.description)}${catById(c.last.category_id) ? ` <span class="chip">${esc(catById(c.last.category_id).name)}</span>` : ''} <span class="hint">${c.count === 1 ? '1 vez' : c.count + ' veces'}</span></span>
+        <span style="display:flex;gap:.4rem;align-items:center;white-space:nowrap">${M(c.last.amount_ars || 0)}<button class="btn btn-ghost btn-xs" data-togtype="${c.last.id}">Marcar fijo</button></span></div>`).join('') : '<p class="hint" style="margin:.4rem 0">No hay gastos variables de los últimos meses para marcar.</p>'}
+    </details>
+    <p class="hint" style="margin-top:.6rem">Se arma con tus gastos marcados como <b>fijo</b>: monto promedio de los últimos 3 meses. Si un fijo no se pagó este mes ni el anterior, se asume dado de baja. Un fijo que todavía no pagaste ni una vez no aparece hasta que lo cargues.</p></div>`;
+}
 function renderCuotas() {
+  renderNextMonth();
   const warn = $('#q-warn'), sum = $('#q-summary'), act = $('#q-active'), doneBox = $('#q-done-box'), done = $('#q-done');
   const cardOpts = S.cards.filter((c) => !c.archived).map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('') || '<option value="">Creá una tarjeta en Config</option>';
   ['#q-card', '#q-icard'].forEach((id) => { const el = $(id), prev = el.value; el.innerHTML = cardOpts; if (prev) el.value = prev; });
