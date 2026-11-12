@@ -28,7 +28,7 @@
       brand: null, last4: null, closed_on: null, due_on: null,
       total_ars: null, total_usd: 0, min_ars: null,
       subtotal_ars: null, subtotal_usd: null, consumos_ars: 0, consumos_usd: 0,
-      cuotas: [], taxes_ars: 0, rg5617_ars: 0, tax_lines: [], other_lines: [], warnings: []
+      cuotas: [], lines: [], taxes_ars: 0, rg5617_ars: 0, tax_lines: [], other_lines: [], warnings: []
     };
     let section = ''; let lastDate = null; let expectTotals = false; let finalTotal = null; let seenDates = false;
     rows.forEach((t) => {
@@ -58,6 +58,7 @@
           const date = m[1] ? iso(m[1]) : lastDate; if (m[1]) lastDate = date;
           const sign = m[6] ? -1 : 1; const amount = sign * num(m[8]); const cur = m[7] === '$' ? 'ARS' : 'USD';
           if (cur === 'ARS') out.consumos_ars += amount; else out.consumos_usd += amount;
+          out.lines.push({ date, description: m[2].trim(), amount, currency: cur, cuota: !!(m[3] && m[4]), ref: m[5] }); // todas las líneas de compras (para elegir fijos)
           if (m[3] && m[4]) {
             if (cur !== 'ARS') out.warnings.push(`La cuota «${m[2]}» está en dólares: por ahora no se carga como plan.`);
             else out.cuotas.push({ description: m[2].trim(), from_no: +m[3], installments: +m[4], amount, date });
