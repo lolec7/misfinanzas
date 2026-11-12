@@ -183,6 +183,19 @@ button.chip:active{opacity:.6}
 .stm{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);padding:.8rem .95rem;margin-bottom:.6rem}
 .stm-head{display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start;margin-bottom:.5rem}
 .stm .fg{margin-bottom:.5rem}
+.fx-pick{margin:.6rem 0;border:0.5px solid var(--border);border-radius:var(--r-sm);padding:.1rem .6rem}
+.fx-pick summary{cursor:pointer;font-size:13px;font-weight:500;padding:.5rem 0}
+.fx-row{padding:.45rem 0;border-top:0.5px solid var(--border);font-size:13px}
+.fx-main{display:flex;gap:.5rem;align-items:flex-start;cursor:pointer}
+.fx-main input{width:auto;flex:none;margin-top:3px}
+.fx-main .fx-t{flex:1;min-width:0;overflow-wrap:anywhere}
+.fx-main .fx-a{font-family:'DM Mono',monospace;white-space:nowrap;font-size:12px}
+.fx-row.off{opacity:.55}
+.fx-det{margin:.4rem 0 .2rem 1.5rem;display:grid;gap:.4rem}
+.fx-det label{font-size:11.5px;color:var(--text2)}
+.fx-det .fx-match{font-size:12px;background:var(--amber-bg);border:0.5px solid var(--amber-bd);border-radius:var(--r-sm);padding:.4rem .5rem}
+.fx-det .fx-match label{display:flex;gap:.4rem;align-items:flex-start;color:var(--text);font-size:12px}
+.fx-det .fx-match input{width:auto;flex:none;margin-top:2px}
 .warn-box{background:var(--amber-bg);border:0.5px solid var(--amber-bd);color:var(--amber);border-radius:var(--r-sm);padding:.5rem .7rem;font-size:12px;margin:.5rem 0}
 .mini-plan{padding:.45rem 0;border-bottom:0.5px solid var(--border)}.mini-plan:last-child{border-bottom:none}
 .mini-top{display:flex;justify-content:space-between;gap:.5rem;font-size:13px;margin-bottom:.3rem}
@@ -1259,7 +1272,7 @@ const loadScriptOnce = (src, check) => new Promise((res, rej) => {
   document.head.appendChild(el);
 });
 async function loadPdfLibs() {
-  await loadScriptOnce('lib/statement.js?v=1', () => window.StatementParser);
+  await loadScriptOnce('lib/statement.js?v=2', () => window.StatementParser);
   await loadScriptOnce('lib/pdf.min.js?v=1', () => window.pdfjsLib);
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js?v=1';
 }
@@ -1294,6 +1307,103 @@ async function onStatementFile(file) {
     renderStatementPreview();
   } catch (e) { box.innerHTML = ''; throw e; }
 }
+/* ---- Elegir compras del resumen para marcarlas como gasto FIJO ---------------------------
+   Solo compras sin cuota y positivas (las cuotas ya se cargan como plan). Cada una tildada crea
+   un gasto (credito, fijo) o, si ya lo tenias cargado, solo lo marca como fijo. El estado vive en
+   S.stm.fx para que cambiar la tarjeta no pierda lo tildado. Anti-duplicado: lo decide el servidor
+   (sql/12) con una clave armada con el texto ORIGINAL del resumen. */
+function stmCandidates(st) {
+  if (st.cand) return st.cand;
+  const seen = {};
+  st.cand = (st.r.lines || []).map((l, i) => ({ ...l, i })).filter((l) => !l.cuota && l.amount > 0 && l.date).map((l) => {
+    const k = `${l.date}|${normS(l.description)}|${l.amount}|${l.currency}`; seen[k] = (seen[k] || 0) + 1; return { ...l, n: seen[k] };
+  });
+  return st.cand;
+}
+const dayNum = (iso) => Math.round(Date.parse(iso + 'T00:00:00Z') / 864e5);
+function stmMatch(l, cardId) {
+  let best = null, bd = 99;
+  S.txs.forEach((t) => {
+    if (!isPlainExpense(t) || t.currency !== l.currency || Math.abs(t.amount - l.amount) > 0.01) return;
+    if (!(t.card_id === cardId || t.payment_method === 'credito')) return;
+    if (t.source === 'import' && String(t.external_id || '').startsWith('stm:')) return;
+    const d = Math.abs(dayNum(t.occurred_on) - dayNum(l.date)); if (d <= 7 && d < bd) { best = t; bd = d; }
+  });
+  return best;
+}
+function stmLoaded(l, cardId) {
+  const tail = `:${l.date}:`, end = `:${l.amount.toFixed(2)}:${l.currency}:${l.n}`;
+  return S.txs.some((t) => t.source === 'import' && String(t.external_id || '').startsWith(`stm:${cardId}${tail}`) && String(t.external_id).endsWith(end));
+}
+function fxState(l) {
+  const st = S.stm; st.fx = st.fx || {};
+  if (!st.fx[l.i]) {
+    const prev = S.txs.filter((t) => t.kind === 'gasto' && t.category_id && normS(t.description) === normS(l.description)).sort((a, b) => b.occurred_on.localeCompare(a.occurred_on))[0];
+    const cat = prev && catById(prev.category_id) && !catById(prev.category_id).archived ? prev.category_id : '';
+    st.fx[l.i] = { on: false, name: l.description, cat, mode: 'same', rate: '', rateAuto: false };
+  }
+  return st.fx[l.i];
+}
+function fxPickerHtml() {
+  const st = S.stm; if (!st) return '';
+  const cand = stmCandidates(st); if (!cand.length) return '';
+  const cardId = st.cardId; const cats = S.cats.filter((c) => !c.archived && c.kind === 'gasto');
+  const nOn = cand.filter((l) => fxState(l).on).length;
+  const rows = cand.map((l) => {
+    const f = fxState(l); const done = stmLoaded(l, cardId);
+    const amt = l.currency === 'USD' ? `USD ${l.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : fmtN(l.amount);
+    let det = '';
+    if (f.on && !done) {
+      const m = stmMatch(l, cardId);
+      det = `<div class="fx-det">
+        <div><label>Nombre del gasto</label><input type="text" maxlength="120" data-fx="name" data-i="${l.i}" value="${esc(f.name)}"></div>
+        <div><label>Categoría</label><select data-fx="cat" data-i="${l.i}"><option value="">Sin categoría</option>${cats.map((c) => `<option value="${c.id}"${c.id === f.cat ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+        ${l.currency === 'USD' ? `<div><label>Cotización (ARS por USD) — el resumen no la trae</label><input type="text" inputmode="decimal" data-fx="rate" data-i="${l.i}" value="${esc(f.rate)}" placeholder="Consultando MEP…"><div class="hint" data-fxhint="${l.i}">${f.rateAuto ? 'MEP de hoy. Poné la que usaste al pagar si fue otra.' : ''}</div></div>` : ''}
+        ${m ? `<div class="fx-match"><b>Ya tenés cargado «${esc(m.description)}»</b> (${fmtDmy(m.occurred_on)}, mismo monto).
+          <label><input type="radio" name="fxm${l.i}" data-fx="mode" data-i="${l.i}" value="same"${f.mode !== 'new' ? ' checked' : ''}> Es el mismo: solo marcarlo como fijo</label>
+          <label><input type="radio" name="fxm${l.i}" data-fx="mode" data-i="${l.i}" value="new"${f.mode === 'new' ? ' checked' : ''}> Es otro: crear uno nuevo</label></div>` : ''}
+      </div>`;
+    }
+    return `<div class="fx-row${done ? ' off' : ''}"><label class="fx-main"><input type="checkbox" data-fx="on" data-i="${l.i}"${f.on && !done ? ' checked' : ''}${done ? ' disabled' : ''}>
+      <span class="fx-t">${esc(l.description)}<br><span class="hint">${fmtDmy(l.date)}${done ? ' · ya cargado como fijo' : ''}</span></span><span class="fx-a">${amt}</span></label>${det}</div>`;
+  }).join('');
+  return `<details class="fx-pick"${st.fxOpen || nOn ? ' open' : ''}><summary>Marcar compras como gasto fijo (${cand.length})${nOn ? ` · ${nOn} elegida(s)` : ''}</summary>
+    <p class="hint" style="margin:0 0 .4rem">Tildá las que se repiten todos los meses (suscripciones, gimnasio…). Se cargan como gasto fijo y entran en «Próximo mes». Las cuotas no aparecen acá: ya se cargan solas.</p>${rows}</details>`;
+}
+function renderFxPicker() { const b = $('#q-fxpick'); if (b && S.stm) b.innerHTML = fxPickerHtml(); }
+async function onFxChange(el) {
+  const st = S.stm; if (!st) return;
+  const l = stmCandidates(st).find((x) => String(x.i) === el.dataset.i); if (!l) return;
+  const f = fxState(l); const k = el.dataset.fx; st.fxOpen = true;
+  if (k === 'on') {
+    if (f.on === el.checked) return; f.on = el.checked; renderFxPicker();
+    if (f.on && l.currency === 'USD' && !f.rate) {
+      try {
+        const x = await fetchFx('bolsa');
+        if (S.stm === st && f.on && !f.rate) { f.rate = String(x.rate); f.rateAuto = true; f.autoVal = String(x.rate); const inp = document.querySelector(`[data-fx="rate"][data-i="${l.i}"]`); if (inp) inp.value = f.rate; const h = document.querySelector(`[data-fxhint="${l.i}"]`); if (h) h.textContent = 'MEP de hoy. Poné la que usaste al pagar si fue otra.'; }
+      } catch (e) { const h = document.querySelector(`[data-fxhint="${l.i}"]`); if (h) h.textContent = 'No pude traer la cotización: cargala a mano.'; }
+    }
+  } else if (k === 'name') f.name = el.value;
+  else if (k === 'cat') f.cat = el.value;
+  else if (k === 'mode') f.mode = el.value;
+  else if (k === 'rate') { f.rate = el.value; if (f.rateAuto && el.value.trim() !== f.autoVal) f.rateAuto = false; }
+}
+function collectFixed(cardId) {
+  const st = S.stm; const out = [];
+  stmCandidates(st).forEach((l) => {
+    const f = fxState(l); if (!f.on || stmLoaded(l, cardId)) return;
+    const name = f.name.trim(); if (!name) throw new Error(`Poné un nombre a «${l.description}»`);
+    if (name.length > 120) throw new Error(`El nombre de «${l.description}» es muy largo (máx. 120)`);
+    let rate = null;
+    if (l.currency === 'USD') {
+      rate = Number(String(f.rate).replace(',', '.'));
+      if (!(rate > 0)) throw new Error(`Falta la cotización del dólar en «${name}»`);
+    }
+    const m = stmMatch(l, cardId);
+    out.push({ date: l.date, description: name, src: l.description, amount: l.amount, currency: l.currency, fx_rate: rate, fx_source: l.currency === 'USD' ? (f.rateAuto ? 'bolsa' : 'manual') : null, category_id: f.cat || null, n: l.n, link_tx: m && f.mode !== 'new' ? m.id : null });
+  });
+  return out;
+}
 function renderStatementPreview() {
   const box = $('#q-preview'); const st = S.stm; if (!st) { box.innerHTML = ''; return; }
   const r = st.r; const cardId = st.cardId || guessCardId(r.brand); st.cardId = cardId;
@@ -1310,6 +1420,7 @@ function renderStatementPreview() {
     <div class="month-row"><span>Pago mínimo</span><b style="font-family:'DM Mono',monospace">${r.min_ars == null ? '?' : fmtN(r.min_ars)}</b></div>
     <div class="month-row"><span>Percepción RG 5617 (30%)</span><b style="font-family:'DM Mono',monospace">${fmtN(r.rg5617_ars)}</b></div>
     <div class="month-row"><span>Cuotas encontradas</span><b>${r.cuotas.length ? r.cuotas.map((c) => `${esc(c.description)} ${c.from_no}/${c.installments} · ${fmtN(c.amount)}`).join('<br>') : 'ninguna'}</b></div>
+    <div id="q-fxpick">${fxPickerHtml()}</div>
     ${dup ? `<div class="warn-box">${dup.paid_on ? 'Ese resumen ya está cargado y pagado: no se va a modificar.' : 'Ese resumen ya estaba cargado: se actualizan sus datos.'}</div>` : ''}
     <div style="display:flex;gap:.5rem;margin-top:.7rem"><button class="btn btn-primary" id="btn-stm-save"${fatal || !cardId ? ' disabled' : ''}><i class="ti ti-device-floppy"></i>Guardar resumen</button>
       <button class="btn btn-ghost" id="btn-stm-cancel">Cancelar</button></div>
@@ -1318,12 +1429,23 @@ function renderStatementPreview() {
 async function saveStatement() {
   const st = S.stm; if (!st) return; const r = st.r; const card = $('#q-pcard').value;
   if (!card) throw new Error('Elegí la tarjeta');
+  const fixed = collectFixed(card); // se valida ANTES de guardar nada
   const saved = must(await sb.rpc('save_card_statement', { p_workspace: S.ws.id, p_card: card, p_due: r.due_on, p_closed_on: r.closed_on, p_total_ars: r.total_ars, p_total_usd: r.total_usd || 0, p_min_ars: r.min_ars, p_rg5617_ars: r.rg5617_ars || 0 }));
   let msg = saved.already_paid ? 'Ese resumen ya estaba pagado (no se modificó).' : 'Resumen guardado.';
   if (!saved.already_paid && r.cuotas.length) {
     const plans = r.cuotas.map((c) => ({ description: c.description, installments: c.installments, from_no: c.from_no, first_due: r.due_on, amounts: Array(c.installments - c.from_no + 1).fill(c.amount) }));
     const imp = must(await sb.rpc('import_card_cuotas', { p_workspace: S.ws.id, p_card: card, p_plans: plans }));
     msg += ` Cuotas: ${imp.plans_created} plan(es) nuevo(s), ${imp.plans_duplicate} ya cargado(s).`;
+  }
+  if (fixed.length) {
+    try {
+      const fr = must(await sb.rpc('import_statement_fixed', { p_workspace: S.ws.id, p_card: card, p_lines: fixed }));
+      const parts = [];
+      if (fr.created) parts.push(`${fr.created} creado(s)`);
+      if (fr.linked) parts.push(`${fr.linked} marcado(s) como fijo`);
+      if (fr.duplicate) parts.push(`${fr.duplicate} ya estaba(n) cargado(s)`);
+      msg += ` Fijos: ${parts.join(', ') || 'nada para cargar'}.`;
+    } catch (e) { msg += ` Pero NO se cargaron los gastos fijos (${e.message || e}). ¿Corriste sql/12? Podés volver a subir el mismo PDF: no duplica.`; }
   }
   // PDF al archivo privado (si falla, los datos ya quedaron guardados)
   const path = `${S.ws.id}/${card}/${r.due_on}.pdf`;
@@ -2013,7 +2135,9 @@ function bindEvents() {
     else if (t.dataset.arch) { const [table, id] = t.dataset.arch.split(':'); guard(() => toggleArchive(table, id)); }
     else if (t.dataset.switch) guard(() => switchWorkspace(t.dataset.switch));
   });
+  document.addEventListener('input', (e) => { const x = e.target.closest('[data-fx="name"],[data-fx="rate"]'); if (x && S.stm) onFxChange(x); });
   document.addEventListener('change', (e) => {
+    const fxe = e.target.closest('[data-fx]'); if (fxe && S.stm) { onFxChange(fxe); return; }
     const po = e.target.closest('[data-payopt]');
     if (po) { const x = S.stmts.find((y) => y.id === po.dataset.payopt); const o = x && payOptions(x).find((z) => z[0] === po.value); const inp = document.querySelector(`[data-payamt="${po.dataset.payopt}"]`);
       if (o && inp) { inp.value = o[2]; inp.readOnly = po.value !== 'otro'; if (po.value === 'otro') inp.focus(); } return; }
